@@ -1,0 +1,6 @@
+rootProject.name = 'f1-prediction-platform'
+
+include 'common'
+include 'api-gateway'
+include 'services:auth-service'
+include 'services:f1-data-service'

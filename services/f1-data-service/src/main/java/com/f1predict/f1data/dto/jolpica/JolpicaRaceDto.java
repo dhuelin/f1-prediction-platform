@@ -1,7 +1,9 @@
 package com.f1predict.f1data.dto.jolpica;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record JolpicaRaceDto(
     @JsonProperty("round") String round,
     @JsonProperty("raceName") String raceName,

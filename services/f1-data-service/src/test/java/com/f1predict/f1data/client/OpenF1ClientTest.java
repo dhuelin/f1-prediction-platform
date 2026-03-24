@@ -1,5 +1,6 @@
 package com.f1predict.f1data.client;
 
+import com.f1predict.f1data.client.F1ApiException;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.*;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
@@ -44,6 +45,16 @@ class OpenF1ClientTest {
 
         var sessions = client.fetchSessions(2025);
         assertThat(sessions).isEmpty();
+    }
+
+    @Test
+    void fetchSessions_throwsF1ApiException_onServerError() {
+        wireMock.stubFor(get(urlPathEqualTo("/v1/sessions"))
+            .withQueryParam("year", equalTo("2025"))
+            .willReturn(aResponse().withStatus(503)));
+
+        assertThatThrownBy(() -> client.fetchSessions(2025))
+            .isInstanceOf(F1ApiException.class);
     }
 
     @Test

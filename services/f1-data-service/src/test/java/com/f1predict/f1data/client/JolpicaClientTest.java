@@ -1,5 +1,6 @@
 package com.f1predict.f1data.client;
 
+import com.f1predict.f1data.client.F1ApiException;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.*;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
@@ -69,6 +70,28 @@ class JolpicaClientTest {
 
         var races = client.fetchCalendar(2025);
         assertThat(races).isEmpty();
+    }
+
+    @Test
+    void fetchRaceResults_returnsEmptyList_whenNoRaces() {
+        wireMock.stubFor(get(urlEqualTo("/ergast/f1/2025/1/results.json"))
+            .willReturn(aResponse()
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {"MRData":{"RaceTable":{"season":"2025","Races":[]}}}
+                    """)));
+
+        var results = client.fetchRaceResults(2025, 1);
+        assertThat(results).isEmpty();
+    }
+
+    @Test
+    void fetchCalendar_throwsF1ApiException_onServerError() {
+        wireMock.stubFor(get(urlEqualTo("/ergast/f1/2025.json"))
+            .willReturn(aResponse().withStatus(503)));
+
+        assertThatThrownBy(() -> client.fetchCalendar(2025))
+            .isInstanceOf(F1ApiException.class);
     }
 
     @Test

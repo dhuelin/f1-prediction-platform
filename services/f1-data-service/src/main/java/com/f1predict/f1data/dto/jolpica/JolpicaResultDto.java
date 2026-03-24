@@ -1,7 +1,9 @@
 package com.f1predict.f1data.dto.jolpica;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record JolpicaResultDto(
     @JsonProperty("position") String position,
     @JsonProperty("Driver") Driver driver,

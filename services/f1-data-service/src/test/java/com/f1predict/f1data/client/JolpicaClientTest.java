@@ -1,7 +1,6 @@
-package com.f1predict.f1data;
+package com.f1predict.f1data.client;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.f1predict.f1data.client.JolpicaClient;
 import org.junit.jupiter.api.*;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.*;
@@ -57,6 +56,19 @@ class JolpicaClientTest {
         var races = client.fetchCalendar(2025);
         assertThat(races).hasSize(1);
         assertThat(races.get(0).isSprintWeekend()).isTrue();
+    }
+
+    @Test
+    void fetchCalendar_returnsEmptyList_whenNoRaces() {
+        wireMock.stubFor(get(urlEqualTo("/ergast/f1/2025.json"))
+            .willReturn(aResponse()
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {"MRData":{"RaceTable":{"season":"2025","Races":[]}}}
+                    """)));
+
+        var races = client.fetchCalendar(2025);
+        assertThat(races).isEmpty();
     }
 
     @Test

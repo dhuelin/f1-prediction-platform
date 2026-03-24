@@ -4,6 +4,7 @@ import com.f1predict.f1data.dto.jolpica.JolpicaRaceDto;
 import com.f1predict.f1data.dto.jolpica.JolpicaResponseDto;
 import com.f1predict.f1data.dto.jolpica.JolpicaResultDto;
 import com.f1predict.f1data.dto.jolpica.JolpicaResultResponseDto;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.web.client.RestClient;
 
 import java.util.Collections;
@@ -20,6 +21,7 @@ public class JolpicaClient {
         var response = restClient.get()
             .uri("/ergast/f1/{season}.json", season)
             .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
             .body(JolpicaResponseDto.class);
         if (response == null || response.mrData().raceTable().races() == null) {
             return Collections.emptyList();
@@ -31,6 +33,7 @@ public class JolpicaClient {
         var response = restClient.get()
             .uri("/ergast/f1/{season}/{round}/results.json", season, round)
             .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
             .body(JolpicaResultResponseDto.class);
         if (response == null) return Collections.emptyList();
         var races = response.mrData().raceTable().races();

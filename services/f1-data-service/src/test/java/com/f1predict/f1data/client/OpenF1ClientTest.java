@@ -1,7 +1,6 @@
-package com.f1predict.f1data;
+package com.f1predict.f1data.client;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import com.f1predict.f1data.client.OpenF1Client;
 import org.junit.jupiter.api.*;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.*;
@@ -33,6 +32,18 @@ class OpenF1ClientTest {
         assertThat(sessions).hasSize(1);
         assertThat(sessions.get(0).sessionKey()).isEqualTo(9158);
         assertThat(sessions.get(0).sessionType()).isEqualTo("Race");
+    }
+
+    @Test
+    void fetchSessions_returnsEmptyList_whenNoSessions() {
+        wireMock.stubFor(get(urlPathEqualTo("/v1/sessions"))
+            .withQueryParam("year", equalTo("2025"))
+            .willReturn(aResponse()
+                .withHeader("Content-Type", "application/json")
+                .withBody("[]")));
+
+        var sessions = client.fetchSessions(2025);
+        assertThat(sessions).isEmpty();
     }
 
     @Test

@@ -8,8 +8,13 @@ public record JolpicaRaceDto(
     @JsonProperty("Circuit") Circuit circuit,
     @JsonProperty("date") String date,
     @JsonProperty("time") String time,
-    @JsonProperty("Sprint") Object sprint
+    @JsonProperty("Sprint") SprintInfo sprint
 ) {
+    public record SprintInfo(
+        @JsonProperty("date") String date,
+        @JsonProperty("time") String time
+    ) {}
+
     public record Circuit(
         @JsonProperty("circuitName") String circuitName,
         @JsonProperty("Location") Location location

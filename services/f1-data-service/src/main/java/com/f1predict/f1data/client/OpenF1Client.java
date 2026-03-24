@@ -3,6 +3,7 @@ package com.f1predict.f1data.client;
 import com.f1predict.f1data.dto.openf1.OpenF1PositionDto;
 import com.f1predict.f1data.dto.openf1.OpenF1SessionDto;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.web.client.RestClient;
 
 import java.util.Collections;
@@ -19,6 +20,7 @@ public class OpenF1Client {
         var result = restClient.get()
             .uri("/v1/sessions?year={year}", year)
             .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
             .body(new ParameterizedTypeReference<List<OpenF1SessionDto>>() {});
         return result != null ? result : Collections.emptyList();
     }
@@ -27,6 +29,7 @@ public class OpenF1Client {
         var result = restClient.get()
             .uri("/v1/position?session_key={key}", sessionKey)
             .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
             .body(new ParameterizedTypeReference<List<OpenF1PositionDto>>() {});
         return result != null ? result : Collections.emptyList();
     }

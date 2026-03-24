@@ -29,14 +29,25 @@ public class OAuth2Service {
             .findByProviderAndProviderSubject(provider, providerSubject)
             .map(oauthAccount -> authService.issueTokens(oauthAccount.getUser()))
             .orElseGet(() -> {
-                User user = userRepository.findByEmail(email)
-                    .orElseGet(() -> {
-                        User newUser = new User();
-                        newUser.setEmail(email);
-                        newUser.setUsername(generateUsername(name));
-                        newUser.setEmailVerified(true);
-                        return userRepository.save(newUser);
-                    });
+                // On first login email is always present; on repeat logins OAuthAccount already exists
+                // Guard defensively in case email is null
+                User user;
+                if (email != null) {
+                    user = userRepository.findByEmail(email)
+                        .orElseGet(() -> {
+                            User newUser = new User();
+                            newUser.setEmail(email);
+                            newUser.setUsername(generateUsername(name));
+                            newUser.setEmailVerified(true);
+                            return userRepository.save(newUser);
+                        });
+                } else {
+                    // No email — create a user without email (should not normally happen on first Apple login)
+                    User newUser = new User();
+                    newUser.setUsername(generateUsername(name));
+                    newUser.setEmailVerified(true);
+                    user = userRepository.save(newUser);
+                }
                 OAuthAccount link = new OAuthAccount();
                 link.setUser(user);
                 link.setProvider(provider);

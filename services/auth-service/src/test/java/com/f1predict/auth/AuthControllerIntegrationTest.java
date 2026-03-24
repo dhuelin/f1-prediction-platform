@@ -244,6 +244,31 @@ class AuthControllerIntegrationTest {
             .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
+    @Test
+    void appleOAuth_repeatLogin_nullEmail_returns200() throws Exception {
+        // First login — email and name provided
+        var firstClaims = new com.f1predict.auth.service.AppleTokenVerifier.AppleClaims(
+            "apple-repeat-sub-001", "applerepeat@privaterelay.appleid.com", "Apple Repeat");
+        org.mockito.Mockito.when(appleTokenVerifier.verify("fake-apple-first")).thenReturn(firstClaims);
+
+        mockMvc.perform(post("/auth/oauth/apple/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-apple-first\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+
+        // Repeat login — email and name are null (Apple behaviour after first login)
+        var repeatClaims = new com.f1predict.auth.service.AppleTokenVerifier.AppleClaims(
+            "apple-repeat-sub-001", null, null);
+        org.mockito.Mockito.when(appleTokenVerifier.verify("fake-apple-repeat")).thenReturn(repeatClaims);
+
+        mockMvc.perform(post("/auth/oauth/apple/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-apple-repeat\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
     private String sha256Hex(String input) throws Exception {
         var digest = java.security.MessageDigest.getInstance("SHA-256");
         byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));

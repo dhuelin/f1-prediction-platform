@@ -108,6 +108,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse issueTokens(User user) {
+        refreshTokenRepository.deleteAllByUserId(user.getId());  // invalidate prior sessions
         String rawRefresh = generateRawRefreshToken();
         persistRefreshToken(user, rawRefresh);
         return new AuthResponse(jwtService.generateAccessToken(user), rawRefresh, accessTokenExpiry);

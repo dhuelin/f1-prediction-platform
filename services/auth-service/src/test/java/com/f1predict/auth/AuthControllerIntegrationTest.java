@@ -59,4 +59,51 @@ class AuthControllerIntegrationTest {
                     """))
             .andExpect(status().isConflict());
     }
+
+    @Test
+    void login_withValidCredentials_returns200WithTokens() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"login@example.com","username":"loginuser","password":"securepass123"}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"login@example.com","password":"securepass123"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void login_withWrongPassword_returns401() throws Exception {
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"nobody@example.com","password":"wrongpass"}
+                    """))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void refresh_withValidToken_returnsNewAccessToken() throws Exception {
+        String response = mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"refresh@example.com","username":"refreshuser","password":"securepass123"}
+                    """))
+            .andReturn().getResponse().getContentAsString();
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        String refreshToken = mapper.readTree(response).get("refreshToken").asText();
+
+        mockMvc.perform(post("/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
 }

@@ -1,6 +1,8 @@
 package com.f1predict.auth.controller;
 
 import com.f1predict.auth.dto.AuthResponse;
+import com.f1predict.auth.dto.LoginRequest;
+import com.f1predict.auth.dto.RefreshRequest;
 import com.f1predict.auth.dto.RegisterRequest;
 import com.f1predict.auth.service.AuthService;
 import jakarta.validation.Valid;
@@ -20,5 +22,15 @@ public class AuthController {
     @ResponseStatus(HttpStatus.CREATED)
     public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
         return authService.register(request);
+    }
+
+    @PostMapping("/login")
+    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
+        return authService.refresh(request);
     }
 }

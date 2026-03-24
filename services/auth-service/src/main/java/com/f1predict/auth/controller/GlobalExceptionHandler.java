@@ -1,6 +1,8 @@
 package com.f1predict.auth.controller;
 
 import com.f1predict.auth.exception.EmailAlreadyExistsException;
+import com.f1predict.auth.exception.InvalidCredentialsException;
+import com.f1predict.auth.exception.InvalidTokenException;
 import com.f1predict.auth.exception.UsernameAlreadyExistsException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -27,5 +29,11 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public Map<String, String> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         return Map.of("field", "unknown", "message", "A record with the provided details already exists.");
+    }
+
+    @ExceptionHandler({InvalidCredentialsException.class, InvalidTokenException.class})
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Map<String, String> handleUnauthorized(RuntimeException ex) {
+        return Map.of("message", ex.getMessage());
     }
 }

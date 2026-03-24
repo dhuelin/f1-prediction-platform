@@ -16,6 +16,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -84,6 +85,7 @@ class RaceCalendarServiceTest {
         var sessions = sessionRepository.findByRaceId(race.getId());
         assertThat(sessions).hasSize(1);
         assertThat(sessions.get(0).getSessionType()).isEqualTo(Session.SessionType.RACE);
+        assertThat(sessions.get(0).getScheduledAt()).isEqualTo(Instant.parse("2025-03-16T15:00:00Z"));
     }
 
     @Test

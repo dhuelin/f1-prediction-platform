@@ -1,5 +1,6 @@
 package com.f1predict.f1data.service;
 
+import com.f1predict.f1data.client.F1ApiException;
 import com.f1predict.f1data.client.JolpicaClient;
 import com.f1predict.f1data.dto.jolpica.JolpicaRaceDto;
 import com.f1predict.f1data.model.Race;
@@ -10,9 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -40,11 +38,15 @@ public class RaceCalendarService {
     }
 
     private Race upsertRace(int season, JolpicaRaceDto dto) {
-        int round = Integer.parseInt(dto.round());
+        int round = parseRound(dto.round());
+        String id = season + "-" + String.format("%02d", round);
         Race race = raceRepository.findBySeasonAndRound(season, round)
-            .orElseGet(Race::new);
+            .orElseGet(() -> {
+                Race r = new Race();
+                r.setId(id);
+                return r;
+            });
 
-        race.setId(season + "-" + String.format("%02d", round));
         race.setSeason(season);
         race.setRound(round);
         race.setRaceName(dto.raceName());
@@ -54,6 +56,14 @@ public class RaceCalendarService {
         race.setSprintWeekend(dto.isSprintWeekend());
 
         return raceRepository.save(race);
+    }
+
+    private int parseRound(String round) {
+        try {
+            return Integer.parseInt(round);
+        } catch (NumberFormatException e) {
+            throw new F1ApiException("Unparseable round value: " + round, e);
+        }
     }
 
     private void upsertSessions(Race race, JolpicaRaceDto dto) {
@@ -76,12 +86,12 @@ public class RaceCalendarService {
     }
 
     private Instant parseInstant(String date, String time) {
-        if (time != null && time.endsWith("Z")) {
-            return Instant.parse(date + "T" + time);
+        try {
+            String t = (time == null) ? "00:00:00Z" : time;
+            if (!t.endsWith("Z")) t = t + "Z";
+            return Instant.parse(date + "T" + t);
+        } catch (Exception e) {
+            throw new F1ApiException("Failed to parse date/time: date=" + date + " time=" + time, e);
         }
-        String safeTime = time != null ? time : "00:00:00";
-        return LocalDate.parse(date)
-            .atTime(LocalTime.parse(safeTime))
-            .toInstant(ZoneOffset.UTC);
     }
 }

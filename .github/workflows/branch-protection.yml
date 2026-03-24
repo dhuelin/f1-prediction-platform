@@ -1,0 +1,42 @@
+name: Setup Branch Protection
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/branch-protection.yml'
+
+jobs:
+  protect-main:
+    runs-on: ubuntu-latest
+    permissions:
+      administration: write
+    steps:
+      - name: Configure branch protection for main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method PUT \
+            -H "Accept: application/vnd.github+json" \
+            /repos/${{ github.repository }}/branches/main/protection \
+            --input - <<'EOF'
+          {
+            "required_status_checks": {
+              "strict": true,
+              "contexts": ["build-and-test"]
+            },
+            "enforce_admins": false,
+            "required_pull_request_reviews": {
+              "dismiss_stale_reviews": true,
+              "require_code_owner_reviews": false,
+              "required_approving_review_count": 1
+            },
+            "restrictions": null,
+            "allow_force_pushes": false,
+            "allow_deletions": false,
+            "block_creations": false,
+            "required_conversation_resolution": true
+          }
+          EOF

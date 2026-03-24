@@ -26,6 +26,6 @@ CREATE TABLE oauth_accounts (
     UNIQUE (provider, provider_subject)
 );
 
-CREATE INDEX idx_users_email ON users(email);
+-- idx_users_email and idx_refresh_tokens_user omitted: covered by UNIQUE constraints above
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id);
 CREATE INDEX idx_oauth_provider_subject ON oauth_accounts(provider, provider_subject);

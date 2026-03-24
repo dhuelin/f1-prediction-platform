@@ -7,5 +7,5 @@ CREATE TABLE password_reset_tokens (
     created_at TIMESTAMP NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_reset_token_hash ON password_reset_tokens(token_hash);
+-- idx_reset_token_hash omitted: covered by UNIQUE constraint above
 CREATE INDEX idx_reset_token_user ON password_reset_tokens(user_id);

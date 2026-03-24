@@ -1,17 +1,23 @@
 package com.f1predict.auth.service;
 
 import com.f1predict.auth.dto.AuthResponse;
+import com.f1predict.auth.dto.ForgotPasswordRequest;
 import com.f1predict.auth.dto.LoginRequest;
 import com.f1predict.auth.dto.RefreshRequest;
 import com.f1predict.auth.dto.RegisterRequest;
+import com.f1predict.auth.dto.ResetPasswordRequest;
 import com.f1predict.auth.exception.EmailAlreadyExistsException;
 import com.f1predict.auth.exception.InvalidCredentialsException;
 import com.f1predict.auth.exception.InvalidTokenException;
 import com.f1predict.auth.exception.UsernameAlreadyExistsException;
+import com.f1predict.auth.model.PasswordResetToken;
 import com.f1predict.auth.model.RefreshToken;
 import com.f1predict.auth.model.User;
+import com.f1predict.auth.repository.PasswordResetTokenRepository;
 import com.f1predict.auth.repository.RefreshTokenRepository;
 import com.f1predict.auth.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,13 +26,17 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.UUID;
 
 @Service
 public class AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final long accessTokenExpiry;
     private final long refreshTokenExpiry;
 
@@ -35,6 +45,7 @@ public class AuthService {
         PasswordEncoder passwordEncoder,
         JwtService jwtService,
         RefreshTokenRepository refreshTokenRepository,
+        PasswordResetTokenRepository passwordResetTokenRepository,
         @Value("${jwt.access-token-expiry}") long accessTokenExpiry,
         @Value("${jwt.refresh-token-expiry}") long refreshTokenExpiry
     ) {
@@ -42,6 +53,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.accessTokenExpiry = accessTokenExpiry;
         this.refreshTokenExpiry = refreshTokenExpiry;
     }
@@ -106,6 +118,35 @@ public class AuthService {
         token.setTokenHash(hashToken(rawRefreshToken));
         token.setExpiresAt(Instant.now().plusSeconds(refreshTokenExpiry));
         refreshTokenRepository.save(token);
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmail(request.email()).ifPresent(user -> {
+            String rawToken = UUID.randomUUID().toString();
+            PasswordResetToken token = new PasswordResetToken();
+            token.setUser(user);
+            token.setTokenHash(hashToken(rawToken));
+            token.setExpiresAt(Instant.now().plusSeconds(900)); // 15 minutes
+            passwordResetTokenRepository.save(token);
+            // Email sending is Sprint 2+. Log token for now.
+            log.info("Password reset token for {}: {}", user.getEmail(), rawToken);
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String hash = hashToken(request.token());
+        PasswordResetToken token = passwordResetTokenRepository.findByTokenHash(hash)
+            .orElseThrow(InvalidTokenException::new);
+        if (token.isUsed() || token.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidTokenException();
+        }
+        token.setUsed(true);
+        passwordResetTokenRepository.save(token);
+        User user = token.getUser();
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
     }
 
     private String hashToken(String raw) {

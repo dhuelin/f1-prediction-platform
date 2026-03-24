@@ -1,9 +1,11 @@
 package com.f1predict.auth;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -37,6 +39,12 @@ class AuthControllerIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired UserRepository userRepository;
     @Autowired PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @MockBean
+    com.f1predict.auth.service.GoogleTokenVerifier googleTokenVerifier;
+
+    @MockBean
+    com.f1predict.auth.service.AppleTokenVerifier appleTokenVerifier;
 
     @Test
     void register_withValidRequest_returns201WithTokens() throws Exception {
@@ -186,6 +194,79 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
             .content("{\"token\":\"" + rawToken + "\",\"newPassword\":\"newpassword1\"}"))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void googleOAuth_newUser_returns200WithTokens() throws Exception {
+        var claims = new com.f1predict.auth.service.GoogleTokenVerifier.GoogleClaims(
+            "google-sub-123", "googleuser@example.com", "Google User");
+        Mockito.when(googleTokenVerifier.verify("fake-google-token")).thenReturn(claims);
+
+        mockMvc.perform(post("/auth/oauth/google/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-google-token\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void googleOAuth_existingUser_linksAccountAndReturnsTokens() throws Exception {
+        // First login creates the user
+        var claims = new com.f1predict.auth.service.GoogleTokenVerifier.GoogleClaims(
+            "google-sub-456", "linkedgoogle@example.com", "Linked User");
+        Mockito.when(googleTokenVerifier.verify("fake-google-token-2")).thenReturn(claims);
+
+        mockMvc.perform(post("/auth/oauth/google/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-google-token-2\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+
+        // Second login with same subject returns tokens (existing oauth account)
+        Mockito.when(googleTokenVerifier.verify("fake-google-token-3")).thenReturn(claims);
+        mockMvc.perform(post("/auth/oauth/google/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-google-token-3\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void appleOAuth_newUser_returns200WithTokens() throws Exception {
+        var claims = new com.f1predict.auth.service.AppleTokenVerifier.AppleClaims(
+            "apple-sub-789", "appleuser@privaterelay.appleid.com", "Apple User");
+        Mockito.when(appleTokenVerifier.verify("fake-apple-token")).thenReturn(claims);
+
+        mockMvc.perform(post("/auth/oauth/apple/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-apple-token\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    @Test
+    void appleOAuth_repeatLogin_nullEmail_returns200() throws Exception {
+        // First login — email and name provided
+        var firstClaims = new com.f1predict.auth.service.AppleTokenVerifier.AppleClaims(
+            "apple-repeat-sub-001", "applerepeat@privaterelay.appleid.com", "Apple Repeat");
+        org.mockito.Mockito.when(appleTokenVerifier.verify("fake-apple-first")).thenReturn(firstClaims);
+
+        mockMvc.perform(post("/auth/oauth/apple/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-apple-first\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
+
+        // Repeat login — email and name are null (Apple behaviour after first login)
+        var repeatClaims = new com.f1predict.auth.service.AppleTokenVerifier.AppleClaims(
+            "apple-repeat-sub-001", null, null);
+        org.mockito.Mockito.when(appleTokenVerifier.verify("fake-apple-repeat")).thenReturn(repeatClaims);
+
+        mockMvc.perform(post("/auth/oauth/apple/callback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"fake-apple-repeat\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
     private String sha256Hex(String input) throws Exception {

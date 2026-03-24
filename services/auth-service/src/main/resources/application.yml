@@ -1,0 +1,30 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/auth_db
+    username: f1predict
+    password: f1predict
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    locations: classpath:db/migration
+
+jwt:
+  secret: ${JWT_SECRET:change-me-in-production-use-256-bit-key-minimum}
+  access-token-expiry: 900
+  refresh-token-expiry: 2592000
+
+oauth2:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:not-set}
+    client-secret: ${GOOGLE_CLIENT_SECRET:not-set}
+  apple:
+    client-id: ${APPLE_CLIENT_ID:not-set}
+    team-id: ${APPLE_TEAM_ID:not-set}
+    key-id: ${APPLE_KEY_ID:not-set}

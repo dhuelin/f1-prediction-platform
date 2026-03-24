@@ -106,6 +106,13 @@ public class AuthService {
         return new AuthResponse(jwtService.generateAccessToken(user), newRefreshRaw, accessTokenExpiry);
     }
 
+    @Transactional
+    public AuthResponse issueTokens(User user) {
+        String rawRefresh = generateRawRefreshToken();
+        persistRefreshToken(user, rawRefresh);
+        return new AuthResponse(jwtService.generateAccessToken(user), rawRefresh, accessTokenExpiry);
+    }
+
     private String generateRawRefreshToken() {
         byte[] bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);

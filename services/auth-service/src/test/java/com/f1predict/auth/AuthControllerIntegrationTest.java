@@ -138,17 +138,31 @@ class AuthControllerIntegrationTest {
             .content("{\"email\":\"pwreset@example.com\",\"username\":\"pwresetuser\",\"password\":\"oldpassword1\"}"))
             .andExpect(status().isCreated());
 
-        // Trigger forgot-password (stores token in DB)
-        mockMvc.perform(post("/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
-            .content("{\"email\":\"pwreset@example.com\"}"))
+        // Insert a known reset token directly into DB (known raw value → known hash)
+        String rawToken = "valid-reset-token-for-test-abc123";
+        String tokenHash = sha256Hex(rawToken);
+        com.f1predict.auth.model.User user = userRepository.findByEmail("pwreset@example.com").orElseThrow();
+        com.f1predict.auth.model.PasswordResetToken resetToken = new com.f1predict.auth.model.PasswordResetToken();
+        resetToken.setUser(user);
+        resetToken.setTokenHash(tokenHash);
+        resetToken.setExpiresAt(java.time.Instant.now().plusSeconds(900));
+        passwordResetTokenRepository.save(resetToken);
+
+        // Call reset-password with the known raw token
+        mockMvc.perform(post("/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"" + rawToken + "\",\"newPassword\":\"newpassword1\"}"))
             .andExpect(status().isOk());
 
-        // Read token record from DB
-        com.f1predict.auth.model.User user = userRepository.findByEmail("pwreset@example.com").orElseThrow();
-        com.f1predict.auth.model.PasswordResetToken tokenRecord =
-            passwordResetTokenRepository.findFirstByUserIdAndUsedFalse(user.getId()).orElseThrow();
-        assertThat(tokenRecord.isUsed()).isFalse();
-        assertThat(tokenRecord.getExpiresAt()).isAfter(java.time.Instant.now());
+        // Verify token is now marked used
+        com.f1predict.auth.model.PasswordResetToken used =
+            passwordResetTokenRepository.findByTokenHash(tokenHash).orElseThrow();
+        assertThat(used.isUsed()).isTrue();
+
+        // Verify new password works (login succeeds)
+        mockMvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"pwreset@example.com\",\"password\":\"newpassword1\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isNotEmpty());
     }
 
     @Test

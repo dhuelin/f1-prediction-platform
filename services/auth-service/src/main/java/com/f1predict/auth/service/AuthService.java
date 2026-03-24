@@ -123,14 +123,14 @@ public class AuthService {
     @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         userRepository.findByEmail(request.email()).ifPresent(user -> {
+            passwordResetTokenRepository.deleteAllByUserId(user.getId());  // invalidate prior tokens
             String rawToken = UUID.randomUUID().toString();
             PasswordResetToken token = new PasswordResetToken();
             token.setUser(user);
             token.setTokenHash(hashToken(rawToken));
-            token.setExpiresAt(Instant.now().plusSeconds(900)); // 15 minutes
+            token.setExpiresAt(Instant.now().plusSeconds(900));
             passwordResetTokenRepository.save(token);
-            // Email sending is Sprint 2+. Log token for now.
-            log.info("Password reset token for {}: {}", user.getEmail(), rawToken);
+            log.debug("Password reset token for user id {}: {}", user.getId(), rawToken);
         });
     }
 

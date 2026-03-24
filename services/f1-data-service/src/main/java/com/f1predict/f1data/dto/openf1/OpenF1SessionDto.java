@@ -1,0 +1,13 @@
+package com.f1predict.f1data.dto.openf1;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public record OpenF1SessionDto(
+    @JsonProperty("session_key") Integer sessionKey,
+    @JsonProperty("session_name") String sessionName,
+    @JsonProperty("session_type") String sessionType,
+    @JsonProperty("date_start") String dateStart,
+    @JsonProperty("year") Integer year
+) {}

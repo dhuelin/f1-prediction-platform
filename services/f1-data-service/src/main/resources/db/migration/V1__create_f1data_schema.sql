@@ -35,8 +35,8 @@ CREATE TABLE race_results (
     driver_code VARCHAR(3) NOT NULL,
     finish_position INT,
     status VARCHAR(20) NOT NULL,
-    is_fastest_lap BOOLEAN DEFAULT false,
-    is_partial_distance BOOLEAN DEFAULT false,
+    is_fastest_lap BOOLEAN NOT NULL DEFAULT false,
+    is_partial_distance BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     amended_at TIMESTAMPTZ,
     UNIQUE(race_id, session_type, driver_code)

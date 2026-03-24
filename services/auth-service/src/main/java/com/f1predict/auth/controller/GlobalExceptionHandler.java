@@ -7,33 +7,34 @@ import com.f1predict.auth.exception.UsernameAlreadyExistsException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Map<String, String> handleEmailConflict(EmailAlreadyExistsException ex) {
-        return Map.of("field", "email", "message", ex.getMessage());
+    public ResponseEntity<Map<String, String>> handleEmailConflict(EmailAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("field", "email", "message", ex.getMessage()));
     }
 
     @ExceptionHandler(UsernameAlreadyExistsException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Map<String, String> handleUsernameConflict(UsernameAlreadyExistsException ex) {
-        return Map.of("field", "username", "message", ex.getMessage());
+    public ResponseEntity<Map<String, String>> handleUsernameConflict(UsernameAlreadyExistsException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("field", "username", "message", ex.getMessage()));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public Map<String, String> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        return Map.of("field", "unknown", "message", "A record with the provided details already exists.");
+    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("field", "unknown", "message", "A record with the provided details already exists."));
     }
 
     @ExceptionHandler({InvalidCredentialsException.class, InvalidTokenException.class})
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public Map<String, String> handleUnauthorized(RuntimeException ex) {
-        return Map.of("message", ex.getMessage());
+    public ResponseEntity<Map<String, String>> handleUnauthorized(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(Map.of("message", ex.getMessage()));
     }
 }

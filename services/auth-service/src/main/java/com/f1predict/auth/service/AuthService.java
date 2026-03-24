@@ -71,6 +71,7 @@ public class AuthService {
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
         }
+        refreshTokenRepository.deleteAllByUserId(user.getId());  // invalidate prior sessions
         String rawRefresh = generateRawRefreshToken();
         persistRefreshToken(user, rawRefresh);
         return new AuthResponse(jwtService.generateAccessToken(user), rawRefresh, accessTokenExpiry);

@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation project(':common')
     implementation libs.spring.boot.web
+    implementation libs.spring.boot.validation
     implementation libs.spring.boot.data.jpa
     implementation libs.spring.boot.security
     implementation libs.spring.boot.oauth2.client

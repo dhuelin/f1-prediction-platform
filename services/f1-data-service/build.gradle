@@ -1,1 +1,19 @@
-plugins { id 'java' }
+plugins {
+    alias(libs.plugins.spring.boot)
+    alias(libs.plugins.spring.dependency.management)
+}
+
+dependencies {
+    implementation project(':common')
+    implementation libs.spring.boot.web
+    implementation libs.spring.boot.data.jpa
+    implementation libs.spring.boot.amqp
+    implementation libs.spring.boot.data.redis
+    implementation libs.flyway
+    implementation libs.flyway.postgres
+    runtimeOnly libs.postgresql
+    testImplementation libs.spring.boot.test
+    testImplementation libs.testcontainers.junit
+    testImplementation libs.testcontainers.postgresql
+    testImplementation libs.wiremock
+}

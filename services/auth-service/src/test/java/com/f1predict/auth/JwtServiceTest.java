@@ -32,7 +32,7 @@ class JwtServiceTest {
         user.setId(UUID.randomUUID());
         String token = shortLivedService.generateAccessToken(user);
 
-        assertThat(jwtService.isTokenValid(token)).isFalse();
+        assertThat(shortLivedService.isTokenValid(token)).isFalse();
     }
 
     @Test

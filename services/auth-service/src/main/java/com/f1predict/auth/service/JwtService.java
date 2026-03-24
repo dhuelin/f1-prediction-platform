@@ -28,21 +28,23 @@ public class JwtService {
     }
 
     public String generateAccessToken(User user) {
+        Instant now = Instant.now();
         return Jwts.builder()
             .subject(user.getId().toString())
             .claim("email", user.getEmail())
-            .issuedAt(Date.from(Instant.now()))
-            .expiration(Date.from(Instant.now().plusSeconds(accessTokenExpiry)))
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plusSeconds(accessTokenExpiry)))
             .signWith(key)
             .compact();
     }
 
     public String generateRefreshToken(User user) {
+        Instant now = Instant.now();
         return Jwts.builder()
             .subject(user.getId().toString())
             .claim("type", "refresh")
-            .issuedAt(Date.from(Instant.now()))
-            .expiration(Date.from(Instant.now().plusSeconds(refreshTokenExpiry)))
+            .issuedAt(Date.from(now))
+            .expiration(Date.from(now.plusSeconds(refreshTokenExpiry)))
             .signWith(key)
             .compact();
     }
@@ -63,7 +65,7 @@ public class JwtService {
         try {
             parseClaims(token);
             return true;
-        } catch (JwtException e) {
+        } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
     }

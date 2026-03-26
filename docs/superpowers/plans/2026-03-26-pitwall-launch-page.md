@@ -139,7 +139,7 @@ pitwall-launch/
   "lint": "eslint src --ext .ts,.astro"
   ```
 
-- [ ] **Step 9: Update `astro.config.mjs` with site URL**
+- [ ] **Step 9: Update `astro.config.mjs` with site URL and disable duplicate base styles**
 
   ```js
   // astro.config.mjs
@@ -149,9 +149,11 @@ pitwall-launch/
   export default defineConfig({
     site: 'https://pitwall.huelin.dev',
     output: 'static',
-    integrations: [tailwind()],
+    integrations: [tailwind({ applyBaseStyles: false })],
   })
   ```
+
+  `applyBaseStyles: false` prevents the Tailwind integration from injecting its own base styles, since `global.css` already includes `@tailwind base/components/utilities` and imports the `@fontsource` packages. Without this, base styles are duplicated and font imports may render out of order.
 
 - [ ] **Step 10: Verify clean build and lint pass**
 
@@ -168,10 +170,12 @@ pitwall-launch/
   git init
   git add .
   git commit -m "[#1] Scaffold Astro 4 + Tailwind + TypeScript + ESLint"
-  git branch -M main
+  git checkout -b feature/1-scaffold
   git remote add origin https://github.com/dhuelin/pitwall-launch.git
-  git push -u origin main
+  git push -u origin feature/1-scaffold
   ```
+
+  Then open a PR on GitHub from `feature/1-scaffold` → `main` with `Closes #1` in the description. Merge the PR to create the `main` branch.
 
 ---
 
@@ -291,12 +295,16 @@ pitwall-launch/
 
   Expected: clean build and lint, no errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit on a feature branch and open a PR**
 
   ```bash
-  git add src/config.ts src/styles/global.css tailwind.config.mjs
+  git checkout -b feature/2-config-design-system
+  git add src/config.ts src/styles/global.css tailwind.config.mjs astro.config.mjs
   git commit -m "[#2] Add config module and design system tokens"
+  git push -u origin feature/2-config-design-system
   ```
+
+  Open PR → `main` with `Closes #2` in description. Merge when CI is green.
 
 ---
 
@@ -382,12 +390,16 @@ pitwall-launch/
 
   Open browser at the local URL. Verify: speed lines sweep across on load, "Join the waitlist" button is visible, page fills viewport.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Commit on a feature branch and open a PR**
 
   ```bash
+  git checkout -b feature/3-hero
   git add src/components/Hero.astro
   git commit -m "[#3] Add Hero section with speed-line animation"
+  git push -u origin feature/3-hero
   ```
+
+  Open PR → `main` with `Closes #3`. Merge when CI is green.
 
 ---
 
@@ -418,13 +430,17 @@ pitwall-launch/
   </section>
   ```
 
-- [ ] **Step 2: Build and commit**
+- [ ] **Step 2: Build, commit on a feature branch, and open a PR**
 
   ```bash
   npm run build
+  git checkout -b feature/4-hook
   git add src/components/Hook.astro
   git commit -m "[#4] Add Hook section"
+  git push -u origin feature/4-hook
   ```
+
+  Open PR → `main` with `Closes #4`. Merge when CI is green.
 
 ---
 
@@ -483,13 +499,17 @@ pitwall-launch/
   </section>
   ```
 
-- [ ] **Step 2: Build and commit**
+- [ ] **Step 2: Build, commit on a feature branch, and open a PR**
 
   ```bash
   npm run build
+  git checkout -b feature/5-how-it-works
   git add src/components/HowItWorks.astro
   git commit -m "[#5] Add How It Works section"
+  git push -u origin feature/5-how-it-works
   ```
+
+  Open PR → `main` with `Closes #5`. Merge when CI is green.
 
 ---
 
@@ -545,13 +565,17 @@ pitwall-launch/
   </section>
   ```
 
-- [ ] **Step 2: Build and commit**
+- [ ] **Step 2: Build, commit on a feature branch, and open a PR**
 
   ```bash
   npm run build
+  git checkout -b feature/6-feature-highlights
   git add src/components/FeatureHighlights.astro
   git commit -m "[#6] Add Feature Highlights section"
+  git push -u origin feature/6-feature-highlights
   ```
+
+  Open PR → `main` with `Closes #6`. Merge when CI is green.
 
 ---
 
@@ -672,12 +696,16 @@ pitwall-launch/
 
   Expected: clean output. The `<script>` block is client-side JS — Astro handles it correctly.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Commit on a feature branch and open a PR**
 
   ```bash
+  git checkout -b feature/7-waitlist-cta
   git add src/components/WaitlistCta.astro
   git commit -m "[#7] Add Waitlist / Download CTA section with inline Formspree submission"
+  git push -u origin feature/7-waitlist-cta
   ```
+
+  Open PR → `main` with `Closes #7`. Merge when CI is green.
 
 ---
 
@@ -711,13 +739,17 @@ pitwall-launch/
   </footer>
   ```
 
-- [ ] **Step 2: Build and commit**
+- [ ] **Step 2: Build, commit on a feature branch, and open a PR**
 
   ```bash
   npm run build
+  git checkout -b feature/8-footer
   git add src/components/Footer.astro
   git commit -m "[#8] Add Footer"
+  git push -u origin feature/8-footer
   ```
+
+  Open PR → `main` with `Closes #8`. Merge when CI is green.
 
 ---
 
@@ -743,7 +775,6 @@ pitwall-launch/
   const description =
     'A prediction league for race fans. Pick your finishing order, place bonus bets, and compete with friends across every race weekend.'
   const url = 'https://pitwall.huelin.dev'
-  const ogImage = `${url}/og.png`
   ---
 
   <!doctype html>
@@ -762,7 +793,7 @@ pitwall-launch/
       <meta property="og:description" content={description} />
 
       <!-- Twitter card -->
-      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:card" content="summary" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
 
@@ -809,12 +840,16 @@ pitwall-launch/
   - Mobile layout: resize to 375px width — How It Works and Feature Highlights stack to single column
   - Footer links are correct
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit on a feature branch and open a PR**
 
   ```bash
+  git checkout -b feature/9-page-assembly
   git add src/pages/index.astro public/favicon.svg
   git commit -m "[#9] Assemble main page with all sections and meta tags"
+  git push -u origin feature/9-page-assembly
   ```
+
+  Open PR → `main` with `Closes #9`. Merge when CI is green.
 
 ---
 
@@ -881,13 +916,16 @@ pitwall-launch/
 
   Note: `permissions: contents: write` is required for `peaceiris/actions-gh-pages` to push to the `gh-pages` branch.
 
-- [ ] **Step 3: Commit and push**
+- [ ] **Step 3: Commit on a feature branch and open a PR**
 
   ```bash
+  git checkout -b feature/10-ci-deploy-workflows
   git add .github/
   git commit -m "[#10] Add CI and manual deploy GitHub Actions workflows"
-  git push origin main
+  git push -u origin feature/10-ci-deploy-workflows
   ```
+
+  Open PR → `main` with `Closes #10`. Merge when CI is green.
 
 - [ ] **Step 4: Verify CI passes on GitHub**
 
@@ -959,13 +997,16 @@ pitwall-launch/
   GitHub Pages provisions HTTPS automatically after the first deploy.
   ```
 
-- [ ] **Step 2: Commit and push**
+- [ ] **Step 2: Commit on a feature branch and open a PR**
 
   ```bash
+  git checkout -b feature/11-readme
   git add README.md
   git commit -m "[#11] Add README with dev, deploy, and beta transition docs"
-  git push origin main
+  git push -u origin feature/11-readme
   ```
+
+  Open PR → `main` with `Closes #11`. Merge when CI is green.
 
 ---
 
@@ -989,10 +1030,13 @@ pitwall-launch/
   4. Open `src/config.ts`, set `formspreeId: 'your-id-here'`
   5. Commit:
      ```bash
+     git checkout -b feature/formspree-id
      git add src/config.ts
      git commit -m "Set Formspree form ID"
-     git push origin main
+     git push -u origin feature/formspree-id
      ```
+
+  Open PR → `main` with description "Set Formspree ID". Merge before triggering deploy.
 
 - [ ] **Step 3: Enable GitHub Pages on the repo**
 

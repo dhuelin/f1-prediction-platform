@@ -165,13 +165,38 @@ Single long-scroll page. All sections stack vertically with consistent horizonta
 
 ---
 
-## 8. GitHub Actions Deploy Pipeline
+## 8. GitHub Actions Pipelines
+
+Two separate workflow files per the project rule: production deployments must always be manually triggered (`workflow_dispatch`), never automatic.
+
+**CI — runs on every push (build + lint only, no deploy):**
+
+```yaml
+# .github/workflows/ci.yml
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build
+```
+
+**Deploy — manual trigger only:**
 
 ```yaml
 # .github/workflows/deploy.yml
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -190,16 +215,18 @@ jobs:
           cname: pitwall.huelin.dev
 ```
 
+The `cname` parameter in the deploy action automatically writes the `CNAME` file to the `gh-pages` branch on each deploy. No manual `CNAME` file in the repo root is needed.
+
 ---
 
 ## 9. Custom Domain Setup
 
-1. Add `CNAME` file to repo root containing `pitwall.huelin.dev`
-2. Add DNS record at domain registrar:
+1. Add DNS record at domain registrar:
    - Type: `CNAME`
    - Name: `pitwall`
    - Value: `dhuelin.github.io`
-3. GitHub Pages detects the CNAME and provisions HTTPS automatically
+2. The `cname: pitwall.huelin.dev` parameter in the deploy workflow automatically writes the `CNAME` file to the `gh-pages` branch — no manual file needed in the repo root.
+3. GitHub Pages detects the CNAME and provisions HTTPS automatically after the first deploy.
 
 ---
 
@@ -209,7 +236,7 @@ jobs:
 2. Create a new form — note the form ID
 3. Add form ID to `src/config.ts`
 4. Submissions are emailed to your registered address
-5. Free tier: 50 submissions/month (sufficient for a waitlist at this stage)
+5. Free tier: 50 submissions/month. **Important:** submissions beyond the monthly limit are silently dropped — not queued or deferred. Monitor the Formspree dashboard regularly as signups grow and upgrade the plan before hitting the cap.
 
 ---
 
@@ -220,7 +247,7 @@ When beta is ready:
 - [ ] Fill in `appStoreUrl` in `src/config.ts`
 - [ ] Fill in `playStoreUrl` in `src/config.ts`
 - [ ] Set `isBetaLive: true` in `src/config.ts`
-- [ ] Push to `main` — GitHub Actions deploys automatically
+- [ ] Trigger the deploy workflow manually via GitHub Actions → `deploy.yml` → "Run workflow"
 - [ ] Verify both store links work on the live page
 - [ ] Email waitlist subscribers (manual, from Formspree dashboard)
 
@@ -231,4 +258,4 @@ When beta is ready:
 - Blog or dev updates section
 - Analytics or tracking scripts
 - App screenshots or demo video (added later when app is built)
-- Dark/light mode toggle (page is dark-only — matches the app brand)
+- Dark/light mode toggle — the launch page is intentionally dark-only as a deliberate design decision for a high-impact first impression. Note: the main Pitwall app does support adaptive dark/light mode following device system preference; this is a launch page exception, not a brand contradiction.

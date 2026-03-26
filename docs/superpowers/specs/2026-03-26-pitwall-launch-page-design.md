@@ -189,6 +189,7 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build
+      - run: npm run lint
 ```
 
 **Deploy — manual trigger only:**

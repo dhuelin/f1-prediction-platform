@@ -42,5 +42,85 @@ services:
       timeout: 5s
       retries: 5
 
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  prediction-service:
+    build: ./services/prediction-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/prediction_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  league-service:
+    build: ./services/league-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/league_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  scoring-service:
+    build: ./services/scoring-service
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scoring_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  f1-data-service:
+    build: ./services/f1-data-service
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/f1data_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres_data:

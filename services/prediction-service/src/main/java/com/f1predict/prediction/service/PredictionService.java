@@ -1,5 +1,6 @@
 package com.f1predict.prediction.service;
 
+import com.f1predict.prediction.client.ScoringClient;
 import com.f1predict.prediction.dto.BonusBetRequest;
 import com.f1predict.prediction.dto.BonusBetResponse;
 import com.f1predict.prediction.dto.PredictionResponse;
@@ -23,11 +24,14 @@ public class PredictionService {
 
     private final PredictionRepository predictionRepository;
     private final BonusBetRepository bonusBetRepository;
+    private final ScoringClient scoringClient;
 
     public PredictionService(PredictionRepository predictionRepository,
-                             BonusBetRepository bonusBetRepository) {
+                             BonusBetRepository bonusBetRepository,
+                             ScoringClient scoringClient) {
         this.predictionRepository = predictionRepository;
         this.bonusBetRepository = bonusBetRepository;
+        this.scoringClient = scoringClient;
     }
 
     @Transactional
@@ -69,6 +73,13 @@ public class PredictionService {
 
         Prediction saved = predictionRepository.save(prediction);
         return toResponse(saved);
+    }
+
+    public void validateStake(UUID userId, UUID leagueId, int stake) {
+        int balance = scoringClient.getBalance(userId, leagueId);
+        if (stake > balance) {
+            throw new IllegalArgumentException("Stake exceeds available points balance");
+        }
     }
 
     @Transactional

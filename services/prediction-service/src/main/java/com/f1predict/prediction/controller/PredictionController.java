@@ -44,7 +44,11 @@ public class PredictionController {
             @PathVariable String raceId,
             @RequestHeader("X-User-Id") UUID userId,
             @RequestParam(defaultValue = "RACE") String sessionType,
+            @RequestParam(required = false) UUID leagueId,
             @Valid @RequestBody BonusBetRequest request) {
+        if (leagueId != null) {
+            predictionService.validateStake(userId, leagueId, request.stake());
+        }
         return predictionService.submitBet(userId, raceId, sessionType, request);
     }
 }

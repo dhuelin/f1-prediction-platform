@@ -1,0 +1,24 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: prediction-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/prediction_db
+    username: f1predict
+    password: f1predict
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    locations: classpath:db/migration
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: f1predict
+    password: f1predict
+
+services:
+  scoring-url: http://localhost:8084

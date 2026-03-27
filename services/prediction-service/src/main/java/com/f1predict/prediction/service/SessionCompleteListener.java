@@ -29,7 +29,6 @@ public class SessionCompleteListener {
     }
 
     @RabbitListener(queues = RabbitMQConfig.SESSION_COMPLETE_QUEUE)
-    @Transactional
     public void onSessionComplete(SessionCompleteEvent event) {
         // Lock main race predictions on QUALIFYING; sprint predictions on SPRINT_SHOOTOUT
         String sessionType;
@@ -40,15 +39,20 @@ public class SessionCompleteListener {
         } else {
             return; // SPRINT and RACE events don't trigger a lock
         }
+        int lockedCount = lockPredictions(event.raceId(), sessionType);
+        log.info("Locked {} {} predictions for race {}", lockedCount, sessionType, event.raceId());
+        try {
+            eventPublisher.publishPredictionLocked(event.raceId(), event.sessionType(), lockedCount);
+        } catch (Exception e) {
+            log.warn("Failed to publish PREDICTION_LOCKED event for race {} — locks are committed", event.raceId(), e);
+        }
+    }
 
-        List<Prediction> predictions = predictionRepository
-            .findByRaceIdAndSessionType(event.raceId(), sessionType);
-
+    @Transactional
+    public int lockPredictions(String raceId, String sessionType) {
+        List<Prediction> predictions = predictionRepository.findByRaceIdAndSessionType(raceId, sessionType);
         predictions.forEach(p -> p.setLocked(true));
         predictionRepository.saveAll(predictions);
-
-        log.info("Locked {} {} predictions for race {}", predictions.size(), sessionType, event.raceId());
-
-        eventPublisher.publishPredictionLocked(event.raceId(), event.sessionType(), predictions.size());
+        return predictions.size();
     }
 }

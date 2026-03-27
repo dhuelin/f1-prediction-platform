@@ -3,6 +3,7 @@ package com.f1predict.prediction.client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -17,7 +18,13 @@ public class ScoringClient {
     private final RestClient restClient;
 
     public ScoringClient(@Value("${services.scoring-url}") String scoringUrl) {
-        this.restClient = RestClient.builder().baseUrl(scoringUrl).build();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(3000);
+        this.restClient = RestClient.builder()
+            .baseUrl(scoringUrl)
+            .requestFactory(factory)
+            .build();
     }
 
     /**

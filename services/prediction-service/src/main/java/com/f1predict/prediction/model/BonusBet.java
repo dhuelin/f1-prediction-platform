@@ -16,8 +16,9 @@ public class BonusBet {
     @JoinColumn(name = "prediction_id", nullable = false)
     private Prediction prediction;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
-    private String betType;
+    private BetType betType;
 
     @Column(nullable = false)
     private int stake;
@@ -49,11 +50,11 @@ public class BonusBet {
         this.prediction = prediction;
     }
 
-    public String getBetType() {
+    public BetType getBetType() {
         return betType;
     }
 
-    public void setBetType(String betType) {
+    public void setBetType(BetType betType) {
         this.betType = betType;
     }
 

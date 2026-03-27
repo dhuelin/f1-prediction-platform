@@ -24,19 +24,19 @@ public class RaceScore {
     @Column(nullable = false, length = 20)
     private String sessionType;
 
-    @Column(nullable = false)
+    @Column(name = "top_n_points", nullable = false)
     private int topNPoints = 0;
 
-    @Column(nullable = false)
+    @Column(name = "bonus_points", nullable = false)
     private int bonusPoints = 0;
 
-    @Column(nullable = false)
+    @Column(name = "total_points", nullable = false)
     private int totalPoints = 0;
 
-    @Column(nullable = false)
+    @Column(name = "is_partial_distance", nullable = false)
     private boolean partialDistance = false;
 
-    @Column(nullable = false)
+    @Column(name = "is_cancelled", nullable = false)
     private boolean cancelled = false;
 
     @Column(nullable = false)

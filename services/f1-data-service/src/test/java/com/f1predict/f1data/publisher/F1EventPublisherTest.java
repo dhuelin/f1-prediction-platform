@@ -41,7 +41,7 @@ class F1EventPublisherTest {
             "race-2025-01",
             SessionCompleteEvent.SessionType.RACE,
             List.of(new RaceResultFinalEvent.DriverResult("VER", 1, RaceResultFinalEvent.DriverStatus.CLASSIFIED)),
-            false);
+            false, "VER", 0);
 
         publisher.publishRaceResultFinal(event);
 
@@ -55,7 +55,7 @@ class F1EventPublisherTest {
             "race-2025-01",
             SessionCompleteEvent.SessionType.RACE,
             List.of(new RaceResultFinalEvent.DriverResult("VER", 2, RaceResultFinalEvent.DriverStatus.CLASSIFIED)),
-            "POST_RACE_TIME_PENALTY");
+            "POST_RACE_TIME_PENALTY", null, 0);
 
         publisher.publishResultAmended(event);
 

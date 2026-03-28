@@ -101,7 +101,9 @@ public class ResultAmendmentService {
                 race.getId(),
                 SessionCompleteEvent.SessionType.RACE,
                 entry.getValue(),
-                entry.getKey()));
+                entry.getKey(),
+                null,   // fastestLapDriver unknown at amendment time; scoring service handles null
+                0));    // safetyCarsDeployed not applicable for post-race amendments
         }
     }
 

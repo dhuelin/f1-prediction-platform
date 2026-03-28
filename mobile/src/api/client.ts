@@ -21,11 +21,23 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
   return config
 })
 
+type Subscriber = { resolve: (token: string) => void; reject: (err: unknown) => void }
 let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
+let refreshSubscribers: Subscriber[] = []
 
-function subscribeToRefresh(cb: (t: string) => void) { refreshSubscribers.push(cb) }
-function notifyRefreshSubscribers(t: string) { refreshSubscribers.forEach(cb => cb(t)); refreshSubscribers = [] }
+function subscribeToRefresh(resolve: (t: string) => void, reject: (e: unknown) => void) {
+  refreshSubscribers.push({ resolve, reject })
+}
+
+function notifyRefreshSubscribers(token: string) {
+  refreshSubscribers.forEach(s => s.resolve(token))
+  refreshSubscribers = []
+}
+
+function rejectRefreshSubscribers(err: unknown) {
+  refreshSubscribers.forEach(s => s.reject(err))
+  refreshSubscribers = []
+}
 
 async function clearAuth() {
   await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY)
@@ -35,40 +47,55 @@ async function clearAuth() {
 apiClient.interceptors.response.use(
   r => r,
   async (error: AxiosError) => {
-    const req = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const req = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+
+    // Guard: network-level errors may have no config
+    if (!req) return Promise.reject(error)
+
     const isAuthEndpoint = req.url?.match(/\/auth\/(login|register|refresh)/)
 
     if (error.response?.status === 401 && !req._retry && !isAuthEndpoint) {
       if (isRefreshing) {
-        return new Promise(resolve => {
-          subscribeToRefresh(token => {
-            if (req.headers) req.headers.Authorization = `Bearer ${token}`
-            resolve(apiClient(req))
-          })
+        // Queue this request until the in-flight refresh settles
+        return new Promise<string>((resolve, reject) => {
+          subscribeToRefresh(resolve, reject)
+        }).then(token => {
+          req._retry = true
+          if (req.headers) req.headers.Authorization = `Bearer ${token}`
+          return apiClient(req)
         })
       }
+
       req._retry = true
       isRefreshing = true
+
       const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY)
       if (!refreshToken) {
         isRefreshing = false
+        rejectRefreshSubscribers(error)
         await clearAuth()
         return Promise.reject(error)
       }
+
       try {
         const { data } = await axios.post<RefreshTokenResponse>(`${BASE_URL}/auth/refresh`, { refreshToken })
         await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, data.accessToken)
         await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken)
         if (req.headers) req.headers.Authorization = `Bearer ${data.accessToken}`
+
+        // Clear flag BEFORE notifying subscribers so replayed requests don't re-queue
+        isRefreshing = false
         notifyRefreshSubscribers(data.accessToken)
-        isRefreshing = false
+
         return apiClient(req)
-      } catch {
+      } catch (refreshError) {
         isRefreshing = false
+        rejectRefreshSubscribers(refreshError)
         await clearAuth()
-        return Promise.reject(error)
+        return Promise.reject(refreshError)
       }
     }
+
     return Promise.reject(error)
   },
 )

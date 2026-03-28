@@ -54,3 +54,55 @@ docker-compose down
 - **Race cancelled:** zero points for all users
 
 See `docs/superpowers/plans/` for sprint implementation plans.
+
+## Web Frontend (`web/`)
+
+Built with **Vite 5 + React + TypeScript** (strict mode), **Tailwind CSS v3**.
+
+### Stack
+| Layer | Technology |
+|-------|-----------|
+| Build | Vite 5, TypeScript strict |
+| UI | React 18, Tailwind CSS v3 |
+| Routing | React Router v6 (`createBrowserRouter`) |
+| State | Zustand (auth store, theme store) |
+| HTTP | Axios with JWT interceptor + refresh logic |
+| DnD | @hello-pangea/dnd |
+| Utilities | clsx, tailwind-merge, date-fns |
+
+### Running locally
+
+```bash
+cd web
+cp .env.example .env          # set VITE_API_BASE_URL if needed
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_API_BASE_URL` | `http://localhost:8080` | API Gateway base URL |
+
+### Project structure
+
+```
+web/src/
+  api/           # Axios client + typed API functions (auth, predictions, leagues, f1data, scoring)
+  components/ui/ # Design-system components (Button, Input, Card, Badge, Avatar, Loader, Modal, ThemeToggle)
+  hooks/         # useTheme
+  lib/           # cn() utility (clsx + tailwind-merge)
+  pages/         # Route-level page components
+  router/        # createBrowserRouter config + ProtectedRoute
+  store/         # Zustand stores (authStore, themeStore)
+  styles/        # tokens.css — CSS custom properties for colours, spacing, shadows
+```
+
+### Design tokens
+
+Defined as CSS custom properties in `src/styles/tokens.css`:
+- **F1 Red:** `#E8002D` · **F1 Orange:** `#FF8000`
+- Dark mode: bg `#0a0a0a`, surface `#1a1a1a`
+- Light mode: bg `#f5f5f5`, surface `#ffffff`
+- Exposed as Tailwind utilities (`text-f1-red`, `bg-surface`, `border-border`, etc.)

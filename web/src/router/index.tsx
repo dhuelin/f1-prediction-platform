@@ -1,14 +1,24 @@
+import React from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
+import { AppLayout } from '@/components/layout/AppLayout'
 
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
-import { DashboardPage } from '@/pages/DashboardPage'
+import { HomePage } from '@/pages/HomePage'
 import { PredictPage } from '@/pages/PredictPage'
 import { LeaguesPage } from '@/pages/LeaguesPage'
 import { LeagueDetailPage } from '@/pages/LeagueDetailPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+
+function Protected({ children }: { children: React.ReactNode }) {
+  return (
+    <ProtectedRoute>
+      <AppLayout>{children}</AppLayout>
+    </ProtectedRoute>
+  )
+}
 
 export const router = createBrowserRouter([
   // --- Public routes ---
@@ -21,53 +31,53 @@ export const router = createBrowserRouter([
     element: <RegisterPage />,
   },
 
-  // --- Protected routes ---
+  // --- Protected routes (wrapped in AppLayout) ---
   {
     path: '/',
     element: (
-      <ProtectedRoute>
-        <DashboardPage />
-      </ProtectedRoute>
+      <Protected>
+        <HomePage />
+      </Protected>
     ),
   },
   {
     path: '/predict/:raceId',
     element: (
-      <ProtectedRoute>
+      <Protected>
         <PredictPage />
-      </ProtectedRoute>
+      </Protected>
     ),
   },
   {
     path: '/leagues',
     element: (
-      <ProtectedRoute>
+      <Protected>
         <LeaguesPage />
-      </ProtectedRoute>
+      </Protected>
     ),
   },
   {
     path: '/leagues/:leagueId',
     element: (
-      <ProtectedRoute>
+      <Protected>
         <LeagueDetailPage />
-      </ProtectedRoute>
+      </Protected>
     ),
   },
   {
     path: '/history',
     element: (
-      <ProtectedRoute>
+      <Protected>
         <HistoryPage />
-      </ProtectedRoute>
+      </Protected>
     ),
   },
   {
     path: '/profile',
     element: (
-      <ProtectedRoute>
+      <Protected>
         <ProfilePage />
-      </ProtectedRoute>
+      </Protected>
     ),
   },
 

@@ -75,21 +75,21 @@ public class PredictionService {
         return toResponse(saved);
     }
 
-    public void validateStake(UUID userId, UUID leagueId, int stake) {
-        int balance = scoringClient.getBalance(userId, leagueId);
-        if (stake > balance) {
-            throw new IllegalArgumentException("Stake exceeds available points balance");
-        }
-    }
-
     @Transactional
-    public BonusBetResponse submitBet(UUID userId, String raceId, String sessionType, BonusBetRequest req) {
+    public BonusBetResponse submitBet(UUID userId, String raceId, String sessionType, UUID leagueId, BonusBetRequest req) {
         String sType = sessionType != null ? sessionType : "RACE";
         Prediction prediction = predictionRepository
             .findByUserIdAndRaceIdAndSessionType(userId, raceId, sType)
             .orElseThrow(() -> new NoSuchElementException("No prediction found for this race"));
         if (prediction.isLocked()) {
             throw new IllegalStateException("Prediction is locked");
+        }
+        // Validate stake inside the transaction to minimise the TOCTOU window
+        if (leagueId != null) {
+            int balance = scoringClient.getBalance(userId, leagueId);
+            if (req.stake() > balance) {
+                throw new IllegalArgumentException("Stake exceeds available points balance");
+            }
         }
         BonusBet bet = new BonusBet();
         bet.setPrediction(prediction);
@@ -114,6 +114,7 @@ public class PredictionService {
 
     private PredictionResponse toResponse(Prediction prediction) {
         List<String> driverCodes = prediction.getEntries().stream()
+            .sorted(java.util.Comparator.comparingInt(PredictionEntry::getPosition))
             .map(PredictionEntry::getDriverCode)
             .toList();
         return new PredictionResponse(

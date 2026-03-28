@@ -10,5 +10,7 @@ public record ResultAmendedEvent(
     String raceId,
     SessionCompleteEvent.SessionType sessionType,
     List<RaceResultFinalEvent.DriverResult> amendedResults,
-    String amendmentReason
+    String amendmentReason,
+    String fastestLapDriver,
+    int safetyCarsDeployed
 ) {}

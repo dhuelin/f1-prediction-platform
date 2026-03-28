@@ -7,7 +7,9 @@ public record RaceResultFinalEvent(
     String raceId,
     SessionCompleteEvent.SessionType sessionType,
     List<DriverResult> results,
-    @JsonProperty("isPartialDistance") boolean isPartialDistance
+    @JsonProperty("isPartialDistance") boolean isPartialDistance,
+    String fastestLapDriver,
+    int safetyCarsDeployed
 ) {
     public record DriverResult(
         String driverCode,

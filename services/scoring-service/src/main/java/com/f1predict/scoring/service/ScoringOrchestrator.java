@@ -15,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -50,51 +52,31 @@ public class ScoringOrchestrator {
 
     /**
      * Called on RACE_RESULT_FINAL and RESULT_AMENDED events.
-     * Fetches all league IDs that have members with predictions, scores each user per league,
-     * persists race_scores, then recalculates standings.
+     * Fetches all league IDs that have standings or prior scores for this race,
+     * scores each user per league, persists race_scores, then recalculates standings.
      */
     public void scoreRace(String raceId,
                           SessionCompleteEvent.SessionType sessionType,
                           List<RaceResultFinalEvent.DriverResult> rawResults,
+                          String fastestLapDriver,
+                          int safetyCarsDeployed,
                           boolean partialDistance,
                           boolean cancelled,
                           int raceNumber) {
         String sessionTypeStr = sessionType.name();
 
-        // Build structured result data
-        RaceResultData result = buildResultData(rawResults, partialDistance, cancelled);
+        RaceResultData result = buildResultData(rawResults, fastestLapDriver, safetyCarsDeployed,
+                partialDistance, cancelled);
 
-        // Fetch all locked predictions for this race
         List<PredictionData> predictions = predictionClient.getPredictions(raceId, sessionTypeStr);
         if (predictions.isEmpty()) {
             log.info("No predictions found for race {} {} — nothing to score", raceId, sessionTypeStr);
             return;
         }
 
-        // Collect unique league IDs for all users who submitted predictions
-        // We query league membership per user to find their leagues
-        // For simplicity: we score each prediction against each league the user belongs to
-        // The league IDs are discovered by calling League Service for each user
-        // (In practice, a dedicated internal endpoint would return all leagues + members)
-
-        // Approach: get all league IDs from standings (leagues with at least one standing)
-        // and score predictions for each
-        List<UUID> leagueIds = standingRepository.findAll()
-            .stream()
-            .map(s -> s.getLeagueId())
-            .distinct()
-            .collect(Collectors.toList());
-
-        // Also include leagues from existing race scores for this race (re-score case)
-        raceScoreRepository.findByLeagueId(UUID.fromString("00000000-0000-0000-0000-000000000000"));
-        List<UUID> leaguesFromScores = raceScoreRepository.findAll()
-            .stream()
-            .map(rs -> rs.getLeagueId())
-            .distinct()
-            .collect(Collectors.toList());
-        for (UUID lid : leaguesFromScores) {
-            if (!leagueIds.contains(lid)) leagueIds.add(lid);
-        }
+        // Collect distinct league IDs from: (a) all known standings, (b) prior scores for this race
+        Set<UUID> leagueIds = new LinkedHashSet<>(standingRepository.findDistinctLeagueIds());
+        leagueIds.addAll(raceScoreRepository.findDistinctLeagueIdsByRaceId(raceId));
 
         for (UUID leagueId : leagueIds) {
             scoreLeague(leagueId, raceId, sessionType, sessionTypeStr,
@@ -137,7 +119,6 @@ public class ScoringOrchestrator {
             score.setScoredAt(Instant.now());
 
             if (cancelled) {
-                // #79 — race cancelled: zero points
                 score.setTopNPoints(0);
                 score.setBonusPoints(0);
                 score.setTotalPoints(0);
@@ -152,7 +133,7 @@ public class ScoringOrchestrator {
                     result,
                     config);
 
-                // #78 — partial distance: halve all points (integer floor)
+                // Partial distance: halve all points (integer floor toward zero)
                 if (partialDistance) {
                     topN = topN / 2;
                     bonus = bonus / 2;
@@ -171,30 +152,29 @@ public class ScoringOrchestrator {
     }
 
     private RaceResultData buildResultData(List<RaceResultFinalEvent.DriverResult> raw,
+                                            String fastestLapDriver,
+                                            int safetyCarsDeployed,
                                             boolean partialDistance,
                                             boolean cancelled) {
         if (raw == null || raw.isEmpty()) {
-            return new RaceResultData(List.of(), null, List.of(), 0, partialDistance, cancelled);
+            return new RaceResultData(List.of(), fastestLapDriver, List.of(),
+                    safetyCarsDeployed, partialDistance, cancelled);
         }
 
-        List<DriverResult> classified = new ArrayList<>();
-        List<String> dnfDsqDns = new ArrayList<>();
-        String fastestLap = null;
-
-        for (RaceResultFinalEvent.DriverResult r : raw) {
-            switch (r.status()) {
-                case CLASSIFIED -> classified.add(new DriverResult(r.driverCode()));
-                case DNF, DSQ, DNS -> dnfDsqDns.add(r.driverCode());
-            }
-        }
-
-        // Sort classified by finishPosition
-        classified = raw.stream()
+        List<DriverResult> classified = raw.stream()
             .filter(r -> r.status() == RaceResultFinalEvent.DriverStatus.CLASSIFIED)
             .sorted(java.util.Comparator.comparingInt(RaceResultFinalEvent.DriverResult::finishPosition))
             .map(r -> new DriverResult(r.driverCode()))
             .collect(Collectors.toList());
 
-        return new RaceResultData(classified, fastestLap, dnfDsqDns, 0, partialDistance, cancelled);
+        List<String> dnfDsqDns = raw.stream()
+            .filter(r -> r.status() == RaceResultFinalEvent.DriverStatus.DNF
+                      || r.status() == RaceResultFinalEvent.DriverStatus.DSQ
+                      || r.status() == RaceResultFinalEvent.DriverStatus.DNS)
+            .map(RaceResultFinalEvent.DriverResult::driverCode)
+            .collect(Collectors.toList());
+
+        return new RaceResultData(classified, fastestLapDriver, dnfDsqDns,
+                safetyCarsDeployed, partialDistance, cancelled);
     }
 }

@@ -170,6 +170,52 @@ class PredictionControllerIntegrationTest {
     }
 
     @Test
+    void submitBet_onLockedPrediction_returns409() throws Exception {
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isCreated());
+
+        predictionRepository.findByRaceId(raceId).forEach(p -> {
+            p.setLocked(true);
+            predictionRepository.save(p);
+        });
+
+        mockMvc.perform(post("/predictions/" + raceId + "/bets")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"betType":"FASTEST_LAP","stake":50,"betValue":"VER"}
+                    """))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void submit_missingUserIdHeader_returns400() throws Exception {
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void submit_invalidRaceIdFormat_returns400() throws Exception {
+        // raceId contains characters outside [A-Z0-9_-] — should be rejected by @Pattern
+        mockMvc.perform(post("/predictions/race@2026!invalid")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void lockedPrediction_rejectsUpdate() throws Exception {
         // Submit prediction
         mockMvc.perform(post("/predictions/" + raceId)

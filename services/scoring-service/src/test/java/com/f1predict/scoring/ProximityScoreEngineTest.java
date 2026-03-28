@@ -80,14 +80,13 @@ class ProximityScoreEngineTest {
 
     @Test
     void multipleDrivers_sumAllPoints() {
-        // VER exact (10), HAM 1-off (7), LEC 2-off (2), NOR in-range (1), PIA not in results (0)
-        // Actual: VER, LEC, HAM, RUS, NOR, ALO, SAI, GAS, STR, BOT
         // Prediction: VER(1), HAM(2), LEC(3), NOR(4), PIA(5)
+        // Actual:     VER(1), LEC(2), HAM(3), RUS(4), NOR(5)
         // VER: actual=1, predicted=1 → exact → 10
         // HAM: actual=3, predicted=2 → 1-off → 7
         // LEC: actual=2, predicted=3 → 1-off → 7
         // NOR: actual=5, predicted=4 → 1-off → 7
-        // PIA: not in top-5 results → 0
+        // PIA: not in actual top-5 → 0
         int score = engine.scoreTopN(
             List.of("VER", "HAM", "LEC", "NOR", "PIA"),
             results("VER", "LEC", "HAM", "RUS", "NOR"),

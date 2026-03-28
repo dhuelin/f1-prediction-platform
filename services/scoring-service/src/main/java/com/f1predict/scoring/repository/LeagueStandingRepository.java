@@ -13,4 +13,7 @@ public interface LeagueStandingRepository extends JpaRepository<LeagueStanding, 
 
     @Query("SELECT COALESCE(AVG(s.totalPoints), 0) FROM LeagueStanding s WHERE s.leagueId = :leagueId")
     int averagePointsByLeagueId(UUID leagueId);
+
+    @Query("SELECT DISTINCT s.leagueId FROM LeagueStanding s")
+    List<UUID> findDistinctLeagueIds();
 }

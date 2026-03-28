@@ -6,13 +6,16 @@ import com.f1predict.prediction.dto.PredictionResponse;
 import com.f1predict.prediction.dto.SubmitPredictionRequest;
 import com.f1predict.prediction.service.PredictionService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/predictions")
+@Validated
 public class PredictionController {
 
     private final PredictionService predictionService;
@@ -24,7 +27,7 @@ public class PredictionController {
     @PostMapping("/{raceId}")
     @ResponseStatus(HttpStatus.CREATED)
     public PredictionResponse submit(
-            @PathVariable String raceId,
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
             @RequestHeader("X-User-Id") UUID userId,
             @Valid @RequestBody SubmitPredictionRequest request) {
         return predictionService.submitPrediction(userId, raceId, request);
@@ -32,7 +35,7 @@ public class PredictionController {
 
     @PutMapping("/{raceId}")
     public PredictionResponse update(
-            @PathVariable String raceId,
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
             @RequestHeader("X-User-Id") UUID userId,
             @Valid @RequestBody SubmitPredictionRequest request) {
         return predictionService.updatePrediction(userId, raceId, request);
@@ -41,14 +44,11 @@ public class PredictionController {
     @PostMapping("/{raceId}/bets")
     @ResponseStatus(HttpStatus.CREATED)
     public BonusBetResponse submitBet(
-            @PathVariable String raceId,
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
             @RequestHeader("X-User-Id") UUID userId,
-            @RequestParam(defaultValue = "RACE") String sessionType,
+            @RequestParam(defaultValue = "RACE") @Pattern(regexp = "RACE|SPRINT") String sessionType,
             @RequestParam(required = false) UUID leagueId,
             @Valid @RequestBody BonusBetRequest request) {
-        if (leagueId != null) {
-            predictionService.validateStake(userId, leagueId, request.stake());
-        }
-        return predictionService.submitBet(userId, raceId, sessionType, request);
+        return predictionService.submitBet(userId, raceId, sessionType, leagueId, request);
     }
 }

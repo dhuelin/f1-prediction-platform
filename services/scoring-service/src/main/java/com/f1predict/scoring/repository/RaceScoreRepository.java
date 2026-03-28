@@ -17,4 +17,7 @@ public interface RaceScoreRepository extends JpaRepository<RaceScore, UUID> {
 
     @Query("SELECT COALESCE(AVG(sub.total), 0) FROM (SELECT SUM(r.totalPoints) AS total FROM RaceScore r WHERE r.leagueId = :leagueId GROUP BY r.userId) sub")
     int averagePointsByLeagueId(UUID leagueId);
+
+    @Query("SELECT DISTINCT rs.leagueId FROM RaceScore rs WHERE rs.raceId = :raceId")
+    List<UUID> findDistinctLeagueIdsByRaceId(String raceId);
 }

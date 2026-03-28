@@ -68,23 +68,19 @@ public class ProximityScoreEngine {
     }
 
     private Integer getTierPoints(int offset, List<OffsetTier> tiers) {
-        // Find the tier with the largest offset threshold that is >= offset (i.e., within that tier)
-        // Tiers are defined as: if offset <= tier.offset → award tier.points
-        // Try tiers from smallest offset upward so the first match is the tightest tier
+        // Find the tier with the smallest offset threshold that still covers this offset.
+        // "Tightest match" means the most specific tier, not the one with the highest points.
+        // This matters for non-monotonic configs (e.g. [{offset:1,pts:5},{offset:2,pts:8}]):
+        // a 1-off result should award 5 (tightest covering tier), not 8.
         if (tiers == null) return null;
-        Integer points = null;
+        OffsetTier best = null;
         for (OffsetTier tier : tiers) {
             if (offset <= tier.offset()) {
-                // Use the points of the tightest applicable tier
-                if (points == null) {
-                    points = tier.points();
-                } else {
-                    // prefer the tier with the smallest offset threshold (tightest match = highest points)
-                    // already found a match — compare
-                    points = Math.max(points, tier.points());
+                if (best == null || tier.offset() < best.offset()) {
+                    best = tier;
                 }
             }
         }
-        return points;
+        return best != null ? best.points() : null;
     }
 }

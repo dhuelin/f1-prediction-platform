@@ -27,6 +27,12 @@ spring:
           uri: http://localhost:8084
           predicates:
             - Path=/scores/**
+        - id: web-app
+          uri: http://web:3000
+          predicates:
+            - Path=/app/**
+          filters:
+            - StripPrefix=1
 
 jwt:
   secret: ${JWT_SECRET:change-me-in-production-use-256-bit-key}

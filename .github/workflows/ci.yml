@@ -33,80 +33,59 @@ jobs:
         run: docker compose up -d --build
         timeout-minutes: 15
 
-      - name: Wait for all backend services to accept connections
+      # nc -z passes immediately because Docker's userland proxy binds the host port
+      # as soon as the container starts, before the JVM initialises. Wait for an actual
+      # HTTP response instead — any status code means Spring Boot is serving.
+      - name: Wait for all services to be HTTP-ready
         run: |
-          wait_for_port() {
+          wait_for_http() {
             local name=$1
-            local port=$2
-            echo "Waiting for $name on port $port..."
-            for i in $(seq 1 30); do
-              if nc -z localhost "$port" 2>/dev/null; then
-                echo "  $name is up"
+            local url=$2
+            echo "Waiting for $name ($url)..."
+            for i in $(seq 1 60); do
+              local status
+              status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 "$url" 2>/dev/null || echo "000")
+              if [ "$status" != "000" ]; then
+                echo "  $name is ready (HTTP $status)"
                 return 0
               fi
-              echo "  Attempt $i/30 - waiting 10s..."
-              sleep 10
+              echo "  Attempt $i/60 - waiting 5s..."
+              sleep 5
             done
-            echo "  $name did not become reachable on port $port"
-            docker compose logs "$name"
+            echo "  $name did not become ready after 5 minutes"
+            docker compose logs "$name" --tail=30
             return 1
           }
 
-          wait_for_port auth-service      8081 || exit 1
-          wait_for_port prediction-service 8082 || exit 1
-          wait_for_port league-service     8083 || exit 1
-          wait_for_port scoring-service    8084 || exit 1
-          wait_for_port f1-data-service    8085 || exit 1
-          wait_for_port api-gateway        8080 || exit 1
-
-      - name: Smoke test - all services reachable directly
-        run: |
-          check_service() {
-            local name=$1
-            local url=$2
-            local status
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
-            echo "$name: HTTP $status"
-            # 2xx/3xx = healthy, 4xx = up but requires auth, 5xx = broken
-            if echo "$status" | grep -qE "^[45]0[0-9]$" && ! echo "$status" | grep -qE "^5"; then
-              return 0  # 4xx: service is up, auth/not-found is expected
-            elif echo "$status" | grep -qE "^[23]"; then
-              return 0  # 2xx/3xx: healthy
-            else
-              echo "  FAIL: $name returned $status — service may have crashed"
-              docker compose logs "$name" --tail=20
-              return 1
-            fi
-          }
-
-          check_service "auth-service"       "http://localhost:8081/auth/api/v1/login"      || exit 1
-          check_service "prediction-service" "http://localhost:8082/predictions/"            || exit 1
-          check_service "league-service"     "http://localhost:8083/leagues/"                || exit 1
-          check_service "scoring-service"    "http://localhost:8084/scores/"                 || exit 1
-          check_service "f1-data-service"    "http://localhost:8085/f1/races"                || exit 1
+          wait_for_http auth-service       "http://localhost:8081/auth/api/v1/login"  || exit 1
+          wait_for_http prediction-service "http://localhost:8082/predictions/"        || exit 1
+          wait_for_http league-service     "http://localhost:8083/leagues/"            || exit 1
+          wait_for_http scoring-service    "http://localhost:8084/scores/"             || exit 1
+          wait_for_http f1-data-service    "http://localhost:8085/f1/races"            || exit 1
+          wait_for_http api-gateway        "http://localhost:8080/auth/api/v1/login"   || exit 1
 
       - name: Smoke test - all routes reachable via api-gateway
         run: |
           check_route() {
-            local route=$1
-            local url="http://localhost:8080$route"
+            local label=$1
+            local url=$2
             local status
-            status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
-            echo "Gateway $route: HTTP $status"
-            # 502/503/504 = gateway cannot reach backend — actual failure
+            status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$url")
+            echo "Gateway $label: HTTP $status"
+            # 502/503/504 = gateway cannot reach the backend service
             if echo "$status" | grep -qE "^50[234]$"; then
-              echo "  FAIL: gateway returned $status for $route — backend unreachable or gateway misconfigured"
+              echo "  FAIL: gateway returned $status — backend unreachable or route misconfigured"
               docker compose logs api-gateway --tail=20
               return 1
             fi
             return 0
           }
 
-          check_route "/auth/api/v1/login"  || exit 1
-          check_route "/predictions/"       || exit 1
-          check_route "/leagues/"           || exit 1
-          check_route "/scores/"            || exit 1
-          check_route "/f1/races"           || exit 1
+          check_route "/auth"        "http://localhost:8080/auth/api/v1/login"  || exit 1
+          check_route "/predictions" "http://localhost:8080/predictions/"        || exit 1
+          check_route "/leagues"     "http://localhost:8080/leagues/"            || exit 1
+          check_route "/scores"      "http://localhost:8080/scores/"             || exit 1
+          check_route "/f1"          "http://localhost:8080/f1/races"            || exit 1
 
       - name: Print all service logs on failure
         if: failure()

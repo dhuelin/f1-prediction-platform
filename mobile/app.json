@@ -16,9 +16,13 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.f1predict.app",
       "buildNumber": "1",
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Used for profile photo upload.",
-        "NSPhotoLibraryUsageDescription": "Used for profile photo upload."
+        "NSPhotoLibraryUsageDescription": "Used for profile photo upload.",
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {

@@ -51,6 +51,8 @@ services:
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
     depends_on:
       postgres:
@@ -69,6 +71,8 @@ services:
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
       SERVICES_SCORING_URL: http://scoring-service:8084
     depends_on:
@@ -88,6 +92,8 @@ services:
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
       SERVICES_SCORING_URL: http://scoring-service:8084
     depends_on:
@@ -107,6 +113,8 @@ services:
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
       SERVICES_PREDICTION_URL: http://prediction-service:8082
       SERVICES_LEAGUE_URL: http://league-service:8083
@@ -127,6 +135,8 @@ services:
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
       SPRING_DATA_REDIS_HOST: redis
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
     depends_on:

@@ -10,6 +10,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 })
 
@@ -76,7 +78,7 @@ export async function registerForPushNotifications(): Promise<void> {
  */
 export function handleNotificationResponse(
   response: Notifications.NotificationResponse,
-  navigate: (screen: string, params?: object) => void,
+  navigate: (screen: string, params?: Record<string, unknown>) => void,
 ): void {
   const data = response.notification.request.content.data as Record<string, string> | undefined
   if (!data) return

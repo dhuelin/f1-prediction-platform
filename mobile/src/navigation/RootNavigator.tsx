@@ -17,7 +17,7 @@ export default function RootNavigator() {
   useEffect(() => {
     // Handle notification tap while app is running or backgrounded
     const sub = Notifications.addNotificationResponseReceivedListener(response => {
-      handleNotificationResponse(response, (screen: string, params: Record<string, unknown>) => {
+      handleNotificationResponse(response, (screen: string, params?: Record<string, unknown>) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ;(navRef.current as any)?.navigate(screen, params)
       })
@@ -26,7 +26,7 @@ export default function RootNavigator() {
     // Handle notification tap that cold-launched the app (killed state)
     Notifications.getLastNotificationResponseAsync().then(response => {
       if (response) {
-        handleNotificationResponse(response, (screen: string, params: Record<string, unknown>) => {
+        handleNotificationResponse(response, (screen: string, params?: Record<string, unknown>) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ;(navRef.current as any)?.navigate(screen, params)
         })

@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { CountdownCircleTimer } from 'react-native-countdown-circle-timer'
 import ScreenWrapper from '@/components/layout/ScreenWrapper'
-import { Card, Loader } from '@/components/ui'
+import { Button, Card, Loader } from '@/components/ui'
 import { useTheme } from '@/hooks/useTheme'
 import { useAuthStore } from '@/store/authStore'
 import { getNextRace } from '@/api/f1data'
 import { getMyLeagues, getStandings } from '@/api/leagues'
 import { colors, spacing, typography } from '@/theme/tokens'
+import { useFocusEffect } from '@react-navigation/native'
 import type { Race, League } from '@/api/types'
 
 export default function HomeScreen() {
@@ -18,6 +19,7 @@ export default function HomeScreen() {
     Array<{ league: League; myRank: number | null; totalPoints: number }>
   >([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const load = async () => {
     try {
@@ -36,13 +38,18 @@ export default function HomeScreen() {
       )
       setLeagueSnapshots(snapshots)
     } catch {
-      // fail silently
+      setError(true)
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { load() }, [])
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true)
+      load()
+    }, [])
+  )
 
   const secondsUntilRace = nextRace
     ? Math.max(0, Math.floor((new Date(nextRace.raceDateTime).getTime() - Date.now()) / 1000))
@@ -58,6 +65,7 @@ export default function HomeScreen() {
     <ScreenWrapper scrollable padded>
       <View style={styles.headerRow}>
         <Text style={[styles.greeting, { color: c.textPrimary }]}>
+          {/* displayName is "First Last" format per API contract */}
           Hey, {user?.displayName?.split(' ')[0] ?? 'Racer'}!
         </Text>
       </View>
@@ -119,7 +127,16 @@ export default function HomeScreen() {
         </Card>
       )}
 
-      {!nextRace && (
+      {error && (
+        <Card>
+          <Text style={[styles.emptyText, { color: c.error }]}>
+            Couldn't load race data. Check your connection.
+          </Text>
+          <Button label="Retry" onPress={() => { setError(false); setLoading(true); load() }} variant="outline" style={{ marginTop: spacing.sm }} />
+        </Card>
+      )}
+
+      {!nextRace && !error && (
         <Card>
           <Text style={[styles.emptyText, { color: c.textMuted }]}>No upcoming races found.</Text>
         </Card>

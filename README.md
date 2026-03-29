@@ -11,12 +11,14 @@ A social F1 race prediction platform where friends compete in leagues by predict
 ## Local Development
 
 ### Prerequisites
-- Docker and Docker Compose
+- Docker Engine 25+ with the **Compose v2 plugin** (`docker compose`)
 
-### Spin up local dependencies
+> **Note:** The old `docker-compose` v1 Python script (v1.29.2) is incompatible with Docker Engine 25+ and will crash with a `ContainerConfig` error. Use `docker compose` (no hyphen). Install the plugin with `sudo apt-get install docker-compose-plugin` if needed.
+
+### Start all services
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 This starts:
@@ -32,7 +34,7 @@ On first startup, `infra/init-db.sql` creates the 7 service databases:
 ### Stop
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## Services

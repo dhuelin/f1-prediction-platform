@@ -10,6 +10,7 @@ dependencyManagement {
 }
 
 dependencies {
+    implementation libs.spring.boot.actuator
     implementation libs.spring.cloud.gateway
     implementation libs.jjwt.api
     runtimeOnly libs.jjwt.impl

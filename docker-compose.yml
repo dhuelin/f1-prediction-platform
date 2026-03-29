@@ -146,18 +146,25 @@ services:
     environment:
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
     depends_on:
-      - auth-service
-      - prediction-service
-      - league-service
-      - scoring-service
-      - f1-data-service
+      auth-service:
+        condition: service_healthy
+      prediction-service:
+        condition: service_healthy
+      league-service:
+        condition: service_healthy
+      scoring-service:
+        condition: service_healthy
+      f1-data-service:
+        condition: service_healthy
 
   web:
     build: ./web
     ports:
       - "3000:80"
     environment:
-      - VITE_API_BASE_URL=http://api-gateway:8080
+      # VITE vars are baked in at build time by Vite — api-gateway is a Docker-internal
+      # hostname the browser cannot resolve, so use the host-mapped port instead.
+      - VITE_API_BASE_URL=http://localhost:8080
     depends_on:
       - api-gateway
 

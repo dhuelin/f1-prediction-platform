@@ -28,7 +28,7 @@ spring:
           predicates:
             - Path=/scores/**
         - id: web-app
-          uri: http://web:3000
+          uri: http://web:80
           predicates:
             - Path=/app/**
           filters:

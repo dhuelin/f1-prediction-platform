@@ -4,49 +4,64 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [main]
+    branches: ["**"]
 
 jobs:
   build-and-test:
+    name: Build & Unit Tests
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      pull-requests: write
-      contents: read
-
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'gradle'
+          java-version: "21"
+          distribution: temurin
+          cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x gradlew
+      - name: Run all unit tests
+        run: ./gradlew test --no-daemon -q
 
-      - name: Run all tests
-        run: ./gradlew test
-        env:
-          JWT_SECRET: test-secret-key-that-is-at-least-256-bits-long
-          GOOGLE_CLIENT_ID: test
-          GOOGLE_CLIENT_SECRET: test
-          APPLE_CLIENT_ID: test
-          APPLE_TEAM_ID: test
-          APPLE_KEY_ID: test
+  docker-smoke-test:
+    name: Docker Compose Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Upload test reports
+      - name: Build and start all services
+        run: docker compose up -d --build
+        timeout-minutes: 15
+
+      - name: Wait for api-gateway to be healthy
+        run: |
+          echo "Waiting for api-gateway..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "api-gateway is up"
+              exit 0
+            fi
+            echo "Attempt $i/30 - waiting 10s..."
+            sleep 10
+          done
+          echo "api-gateway did not become healthy in time"
+          docker compose logs api-gateway
+          exit 1
+
+      - name: Smoke test - auth service reachable via gateway
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
+          echo "Auth health status: $STATUS"
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
+            echo "Unexpected status: $STATUS"
+            docker compose logs
+            exit 1
+          fi
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose logs --tail=50
+
+      - name: Tear down
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports
-          path: "**/build/reports/tests/"
-
-      - name: Publish test summary
-        if: always()
-        uses: dorny/test-reporter@v1
-        with:
-          name: Test Results
-          path: "**/build/test-results/**/*.xml"
-          reporter: java-junit
+        run: docker compose down -v

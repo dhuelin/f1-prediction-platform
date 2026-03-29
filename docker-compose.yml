@@ -43,7 +43,9 @@ services:
       retries: 5
 
   auth-service:
-    build: ./services/auth-service
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
     ports:
       - "8081:8081"
     environment:
@@ -59,7 +61,9 @@ services:
         condition: service_healthy
 
   prediction-service:
-    build: ./services/prediction-service
+    build:
+      context: .
+      dockerfile: services/prediction-service/Dockerfile
     ports:
       - "8082:8082"
     environment:
@@ -75,7 +79,9 @@ services:
         condition: service_healthy
 
   league-service:
-    build: ./services/league-service
+    build:
+      context: .
+      dockerfile: services/league-service/Dockerfile
     ports:
       - "8083:8083"
     environment:
@@ -91,7 +97,9 @@ services:
         condition: service_healthy
 
   scoring-service:
-    build: ./services/scoring-service
+    build:
+      context: .
+      dockerfile: services/scoring-service/Dockerfile
     ports:
       - "8084:8084"
     environment:
@@ -107,7 +115,9 @@ services:
         condition: service_healthy
 
   f1-data-service:
-    build: ./services/f1-data-service
+    build:
+      context: .
+      dockerfile: services/f1-data-service/Dockerfile
     ports:
       - "8085:8085"
     environment:
@@ -121,6 +131,21 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+    depends_on:
+      - auth-service
+      - prediction-service
+      - league-service
+      - scoring-service
+      - f1-data-service
 
   web:
     build: ./web

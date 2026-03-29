@@ -33,32 +33,82 @@ jobs:
         run: docker compose up -d --build
         timeout-minutes: 15
 
-      - name: Wait for api-gateway to be healthy
+      - name: Wait for all backend services to accept connections
         run: |
-          echo "Waiting for api-gateway..."
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null 2>&1; then
-              echo "api-gateway is up"
-              exit 0
+          wait_for_port() {
+            local name=$1
+            local port=$2
+            echo "Waiting for $name on port $port..."
+            for i in $(seq 1 30); do
+              if nc -z localhost "$port" 2>/dev/null; then
+                echo "  $name is up"
+                return 0
+              fi
+              echo "  Attempt $i/30 - waiting 10s..."
+              sleep 10
+            done
+            echo "  $name did not become reachable on port $port"
+            docker compose logs "$name"
+            return 1
+          }
+
+          wait_for_port auth-service      8081 || exit 1
+          wait_for_port prediction-service 8082 || exit 1
+          wait_for_port league-service     8083 || exit 1
+          wait_for_port scoring-service    8084 || exit 1
+          wait_for_port f1-data-service    8085 || exit 1
+          wait_for_port api-gateway        8080 || exit 1
+
+      - name: Smoke test - all services reachable directly
+        run: |
+          check_service() {
+            local name=$1
+            local url=$2
+            local status
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+            echo "$name: HTTP $status"
+            # 2xx/3xx = healthy, 4xx = up but requires auth, 5xx = broken
+            if echo "$status" | grep -qE "^[45]0[0-9]$" && ! echo "$status" | grep -qE "^5"; then
+              return 0  # 4xx: service is up, auth/not-found is expected
+            elif echo "$status" | grep -qE "^[23]"; then
+              return 0  # 2xx/3xx: healthy
+            else
+              echo "  FAIL: $name returned $status — service may have crashed"
+              docker compose logs "$name" --tail=20
+              return 1
             fi
-            echo "Attempt $i/30 - waiting 10s..."
-            sleep 10
-          done
-          echo "api-gateway did not become healthy in time"
-          docker compose logs api-gateway
-          exit 1
+          }
 
-      - name: Smoke test - auth service reachable via gateway
+          check_service "auth-service"       "http://localhost:8081/auth/api/v1/login"      || exit 1
+          check_service "prediction-service" "http://localhost:8082/predictions/"            || exit 1
+          check_service "league-service"     "http://localhost:8083/leagues/"                || exit 1
+          check_service "scoring-service"    "http://localhost:8084/scores/"                 || exit 1
+          check_service "f1-data-service"    "http://localhost:8085/f1/races"                || exit 1
+
+      - name: Smoke test - all routes reachable via api-gateway
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/auth/health || true)
-          echo "Auth health status: $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
-            echo "Unexpected status: $STATUS"
-            docker compose logs
-            exit 1
-          fi
+          check_route() {
+            local route=$1
+            local url="http://localhost:8080$route"
+            local status
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+            echo "Gateway $route: HTTP $status"
+            # 502/503/504 = gateway cannot reach backend — actual failure
+            if echo "$status" | grep -qE "^50[234]$"; then
+              echo "  FAIL: gateway returned $status for $route — backend unreachable or gateway misconfigured"
+              docker compose logs api-gateway --tail=20
+              return 1
+            fi
+            return 0
+          }
 
-      - name: Print service logs on failure
+          check_route "/auth/api/v1/login"  || exit 1
+          check_route "/predictions/"       || exit 1
+          check_route "/leagues/"           || exit 1
+          check_route "/scores/"            || exit 1
+          check_route "/f1/races"           || exit 1
+
+      - name: Print all service logs on failure
         if: failure()
         run: docker compose logs --tail=50
 

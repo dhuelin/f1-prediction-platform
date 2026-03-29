@@ -125,6 +125,6 @@ const styles = StyleSheet.create({
   email: { fontSize: typography.sizes.sm },
   section: { marginBottom: spacing.md },
   sectionTitle: { fontSize: typography.sizes.xs, fontWeight: '700', letterSpacing: 1.5, marginBottom: spacing.sm },
-  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
+  settingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm, minHeight: 44 },
   settingLabel: { fontSize: typography.sizes.base },
 })

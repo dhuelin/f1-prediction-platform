@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist'
-import { Badge, Button, Loader } from '@/components/ui'
+import { Badge, Button, Card, Loader } from '@/components/ui'
 import { useTheme } from '@/hooks/useTheme'
 import { getDrivers, getNextRace } from '@/api/f1data'
 import { getPrediction, submitPrediction, updatePrediction } from '@/api/predictions'
@@ -19,6 +20,7 @@ interface DriverItem {
 
 export default function PredictScreen() {
   const { colors: c } = useTheme()
+  const insets = useSafeAreaInsets()
   const [race, setRace] = useState<Race | null>(null)
   const [ranked, setRanked] = useState<DriverItem[]>([])
   const [leagues, setLeagues] = useState<League[]>([])
@@ -92,6 +94,8 @@ export default function PredictScreen() {
             {
               backgroundColor: isActive ? c.surfaceElevated : c.surface,
               borderColor: inPrediction ? rawColors.primary : c.border,
+              // Dim rows when locked so the drag handle affordance isn't misleading
+              opacity: isLocked ? 0.55 : 1,
             },
           ]}
         >
@@ -103,7 +107,7 @@ export default function PredictScreen() {
             <Text style={[styles.driverName, { color: c.textSecondary }]}>{item.name}</Text>
           </View>
           <Text style={[styles.teamName, { color: c.textMuted }]} numberOfLines={1}>{item.team}</Text>
-          <Text style={{ color: c.textMuted, fontSize: 18 }}>≡</Text>
+          {!isLocked && <Text style={{ color: c.textMuted, fontSize: 18 }}>≡</Text>}
         </TouchableOpacity>
       </ScaleDecorator>
     )
@@ -111,10 +115,29 @@ export default function PredictScreen() {
 
   if (loading) return <Loader />
 
+  // No leagues: guide the user rather than letting them submit into the void
+  if (leagues.length === 0) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.background, paddingTop: insets.top }]}>
+        <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
+          <Text style={[styles.headerTitle, { color: c.textPrimary }]}>Predict</Text>
+        </View>
+        <View style={styles.emptyState}>
+          <Card>
+            <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>No league joined yet</Text>
+            <Text style={[styles.emptyBody, { color: c.textMuted }]}>
+              Join or create a league from the Leagues tab before submitting a prediction.
+            </Text>
+          </Card>
+        </View>
+      </View>
+    )
+  }
+
   const isDeadlinePassed = race ? new Date(race.qualifyingDateTime) < new Date() : false
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.background }}>
+    <View style={[styles.container, { backgroundColor: c.background, paddingTop: insets.top }]}>
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Text style={[styles.headerTitle, { color: c.textPrimary }]}>
           {race ? race.name : 'No Upcoming Race'}
@@ -123,27 +146,41 @@ export default function PredictScreen() {
         {isDeadlinePassed && !isLocked && <Badge label="DEADLINE PASSED" variant="warning" />}
       </View>
 
-      <DraggableFlatList
-        data={ranked}
-        onDragEnd={({ data }) => setRanked(data)}
-        keyExtractor={item => item.key}
-        renderItem={renderItem}
-        containerStyle={{ flex: 1 }}
-      />
-
-      {!isLocked && !isDeadlinePassed && race && (
-        <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.border }]}>
-          <Button label="Save Prediction" onPress={handleSubmit} loading={saving} fullWidth />
+      {/* No race: still show the driver list context-free is confusing — show empty state */}
+      {!race ? (
+        <View style={styles.emptyState}>
+          <Card>
+            <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>Off-season</Text>
+            <Text style={[styles.emptyBody, { color: c.textMuted }]}>
+              No upcoming race found. Check back when the next race weekend is announced.
+            </Text>
+          </Card>
         </View>
+      ) : (
+        <>
+          <DraggableFlatList
+            data={ranked}
+            onDragEnd={({ data }) => setRanked(data)}
+            keyExtractor={item => item.key}
+            renderItem={renderItem}
+            containerStyle={{ flex: 1 }}
+          />
+
+          {!isLocked && !isDeadlinePassed && (
+            <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.border, paddingBottom: insets.bottom + spacing.md }]}>
+              <Button label="Save Prediction" onPress={handleSubmit} loading={saving} fullWidth />
+            </View>
+          )}
+        </>
       )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
+  container: { flex: 1 },
   header: {
     padding: spacing.md,
-    paddingTop: 60,
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -155,6 +192,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
+    minHeight: 44,
     borderLeftWidth: 3,
     borderTopWidth: 0,
     borderRightWidth: 0,
@@ -170,5 +208,8 @@ const styles = StyleSheet.create({
   driverCode: { fontSize: typography.sizes.base, fontWeight: '700', letterSpacing: 0.5 },
   driverName: { fontSize: typography.sizes.xs },
   teamName: { fontSize: typography.sizes.xs, maxWidth: 100, textAlign: 'right', marginRight: 8 },
-  footer: { padding: spacing.md, borderTopWidth: 1, paddingBottom: 32 },
+  footer: { padding: spacing.md, borderTopWidth: 1 },
+  emptyState: { flex: 1, justifyContent: 'center', padding: spacing.lg },
+  emptyTitle: { fontSize: typography.sizes.lg, fontWeight: '700', marginBottom: spacing.sm },
+  emptyBody: { fontSize: typography.sizes.sm, lineHeight: 20 },
 })

@@ -10,7 +10,11 @@ interface Props {
 export default function Avatar({ name, size = 40 }: Props) {
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
   return (
-    <View style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}>
+    <View
+      style={[styles.circle, { width: size, height: size, borderRadius: size / 2 }]}
+      accessibilityLabel={name}
+      accessibilityRole="image"
+    >
       <Text style={[styles.text, { fontSize: size * 0.35 }]}>{initials}</Text>
     </View>
   )

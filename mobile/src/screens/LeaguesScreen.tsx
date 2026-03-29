@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Alert, FlatList, Modal, StyleSheet, Text,
-  TouchableOpacity, View,
+  Alert, FlatList, KeyboardAvoidingView, Modal,
+  Platform, StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -64,11 +64,25 @@ export default function LeaguesScreen() {
 
   return (
     <ScreenWrapper>
+      {/* Header — no extra paddingTop; ScreenWrapper's SafeAreaView handles the inset */}
       <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.border }]}>
         <Text style={[styles.title, { color: c.textPrimary }]}>My Leagues</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => setShowJoin(true)} style={[styles.iconBtn, { backgroundColor: c.surfaceElevated }]}>
-            <Text style={{ color: c.textPrimary, fontSize: 20 }}>+</Text>
+          <TouchableOpacity
+            onPress={() => setShowJoin(true)}
+            style={[styles.iconBtn, { backgroundColor: c.surfaceElevated }]}
+            accessibilityLabel="Join a league"
+            accessibilityRole="button"
+          >
+            <Text style={{ color: c.textPrimary, fontSize: 18, lineHeight: 22 }}>+</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setShowCreate(true)}
+            style={[styles.iconBtn, { backgroundColor: c.surfaceElevated }]}
+            accessibilityLabel="Create a league"
+            accessibilityRole="button"
+          >
+            <Text style={{ color: c.textPrimary, fontSize: 13, fontWeight: '700', lineHeight: 16 }}>NEW</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -94,36 +108,57 @@ export default function LeaguesScreen() {
         }
       />
 
+      {/* Join modal */}
       <Modal visible={showJoin} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={[styles.modalSheet, { backgroundColor: c.surface }]}>
             <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Join League</Text>
-            <TextInput label="Invite Code" value={inviteCode} onChangeText={setInviteCode} autoCapitalize="characters" placeholder="ABC123" />
+            <TextInput
+              label="Invite Code"
+              value={inviteCode}
+              onChangeText={setInviteCode}
+              autoCapitalize="characters"
+              placeholder="ABC123"
+            />
             <Button label="Join" onPress={handleJoin} loading={actionLoading} fullWidth />
             <Button label="Cancel" onPress={() => setShowJoin(false)} variant="ghost" fullWidth style={{ marginTop: 8 }} />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
+      {/* Create modal */}
       <Modal visible={showCreate} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={[styles.modalSheet, { backgroundColor: c.surface }]}>
             <Text style={[styles.modalTitle, { color: c.textPrimary }]}>Create League</Text>
-            <TextInput label="League Name" value={newLeagueName} onChangeText={setNewLeagueName} placeholder="Red Bull Friends" />
+            <TextInput
+              label="League Name"
+              value={newLeagueName}
+              onChangeText={setNewLeagueName}
+              placeholder="Red Bull Friends"
+            />
             <Button label="Create" onPress={handleCreate} loading={actionLoading} fullWidth />
             <Button label="Cancel" onPress={() => setShowCreate(false)} variant="ghost" fullWidth style={{ marginTop: 8 }} />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScreenWrapper>
   )
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, paddingTop: 60, borderBottomWidth: 1 },
+  // No paddingTop here — ScreenWrapper's SafeAreaView handles the status bar inset
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1 },
   title: { fontSize: typography.sizes['2xl'], fontWeight: '700' },
   headerActions: { flexDirection: 'row', gap: 8 },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+  // 44×44 minimum touch target
+  iconBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   list: { padding: spacing.md, gap: spacing.sm },
   leagueCard: {},
   leagueName: { fontSize: typography.sizes.lg, fontWeight: '700', marginBottom: 4 },

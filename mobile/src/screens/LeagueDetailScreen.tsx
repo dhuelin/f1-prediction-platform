@@ -5,7 +5,7 @@ import ScreenWrapper from '@/components/layout/ScreenWrapper'
 import { Avatar, Loader } from '@/components/ui'
 import { useTheme } from '@/hooks/useTheme'
 import { getLeague, getStandings } from '@/api/leagues'
-import { spacing, typography, colors as rawColors } from '@/theme/tokens'
+import { spacing, typography } from '@/theme/tokens'
 import type { League, LeagueStandings, Standing } from '@/api/types'
 import type { LeagueStackParamList } from '@/navigation/AppNavigator'
 
@@ -39,7 +39,7 @@ export default function LeagueDetailScreen() {
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null
     return (
       <View style={[styles.row, { borderBottomColor: c.border }]}>
-        <Text style={[styles.rank, { color: index < 3 ? rawColors.primary : c.textMuted }]}>
+        <Text style={[styles.rank, { color: index < 3 ? c.primary : c.textMuted }]}>
           {medal ?? item.rank}
         </Text>
         <Avatar name={item.displayName} size={36} />
@@ -47,7 +47,7 @@ export default function LeagueDetailScreen() {
           <Text style={[styles.displayName, { color: c.textPrimary }]}>{item.displayName}</Text>
           <Text style={[styles.races, { color: c.textMuted }]}>{item.racesScored} races</Text>
         </View>
-        <Text style={[styles.points, { color: rawColors.primary }]}>{item.totalPoints} pts</Text>
+        <Text style={[styles.points, { color: c.primary }]}>{item.totalPoints} pts</Text>
       </View>
     )
   }
@@ -78,7 +78,7 @@ export default function LeagueDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { padding: spacing.md, paddingTop: 60, borderBottomWidth: 1, marginBottom: spacing.sm },
+  header: { padding: spacing.md, borderBottomWidth: 1, marginBottom: spacing.sm },
   leagueName: { fontSize: typography.sizes.xl, fontWeight: '700' },
   leagueMeta: { fontSize: typography.sizes.sm, marginTop: 4 },
   sectionTitle: { fontSize: typography.sizes.xs, fontWeight: '700', letterSpacing: 1.5, marginBottom: spacing.sm, paddingHorizontal: spacing.md },

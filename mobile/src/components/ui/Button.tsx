@@ -2,6 +2,7 @@ import React from 'react'
 import {
   ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle
 } from 'react-native'
+import { useTheme } from '@/hooks/useTheme'
 import { colors, radius, typography } from '@/theme/tokens'
 
 type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger'
@@ -20,18 +21,20 @@ export default function Button({
   label, onPress, variant = 'primary', loading = false,
   disabled = false, fullWidth = false, style
 }: Props) {
+  const { colors: c } = useTheme()
+
   const bg: Record<Variant, string> = {
-    primary:   colors.primary,
-    secondary: colors.surface,
+    primary:   colors.primary,   // theme-invariant
+    secondary: c.surface,        // theme-aware
     outline:   'transparent',
     ghost:     'transparent',
-    danger:    colors.error,
+    danger:    colors.error,     // theme-invariant
   }
   const fg: Record<Variant, string> = {
     primary:   '#fff',
-    secondary: colors.textPrimary,
+    secondary: c.textPrimary,    // theme-aware
     outline:   colors.primary,
-    ghost:     colors.textSecondary,
+    ghost:     c.textSecondary,  // theme-aware
     danger:    '#fff',
   }
   const borderColor = variant === 'outline' ? colors.primary : 'transparent'

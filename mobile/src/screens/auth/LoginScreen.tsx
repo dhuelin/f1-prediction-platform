@@ -3,6 +3,7 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import * as Google from 'expo-auth-session/providers/google'
+import { ResponseType } from 'expo-auth-session'
 import * as WebBrowser from 'expo-web-browser'
 import ScreenWrapper from '@/components/layout/ScreenWrapper'
 import { Button, TextInput } from '@/components/ui'
@@ -29,6 +30,7 @@ export default function LoginScreen({ navigation }: Props) {
     iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
     webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    responseType: ResponseType.IdToken,
   })
 
   const handleLogin = async () => {
@@ -47,8 +49,13 @@ export default function LoginScreen({ navigation }: Props) {
   const handleGoogleLogin = async () => {
     try {
       const result = await promptGoogleAsync()
-      if (result?.type !== 'success' || !result.authentication?.idToken) return
-      const resp = await loginWithGoogle(result.authentication.idToken)
+      if (result?.type !== 'success') return
+      const idToken = result.params?.id_token
+      if (!idToken) {
+        Alert.alert('Google Sign-In Failed', 'Could not retrieve ID token')
+        return
+      }
+      const resp = await loginWithGoogle(idToken)
       await setAuth(resp.user, resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       Alert.alert('Google Sign-In Failed', e?.message ?? 'Please try again')
@@ -66,7 +73,11 @@ export default function LoginScreen({ navigation }: Props) {
       const fullName = cred.fullName
         ? `${cred.fullName.givenName ?? ''} ${cred.fullName.familyName ?? ''}`.trim()
         : undefined
-      const resp = await loginWithApple(cred.identityToken!, fullName)
+      if (!cred.identityToken) {
+        Alert.alert('Apple Sign-In Failed', 'No identity token returned')
+        return
+      }
+      const resp = await loginWithApple(cred.identityToken, fullName)
       await setAuth(resp.user, resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       if (e.code !== 'ERR_CANCELED') {

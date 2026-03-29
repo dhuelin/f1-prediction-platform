@@ -21,7 +21,7 @@ export default function RegisterScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false)
 
   const handleRegister = async () => {
-    if (!displayName || !email || !password) { Alert.alert('Error', 'All fields required'); return }
+    if (!displayName || !email || !password || !confirm) { Alert.alert('Error', 'All fields required'); return }
     if (password !== confirm) { Alert.alert('Error', 'Passwords do not match'); return }
     if (password.length < 8) { Alert.alert('Error', 'Password must be at least 8 characters'); return }
     setLoading(true)

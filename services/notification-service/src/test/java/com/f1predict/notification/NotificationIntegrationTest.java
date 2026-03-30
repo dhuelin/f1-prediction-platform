@@ -125,5 +125,6 @@ class NotificationIntegrationTest {
         var stored = preferencesRepository.findByUserId(userId);
         assertThat(stored).isPresent();
         assertThat(stored.get().isPredictionReminder()).isFalse();
+        assertThat(stored.get().isScoreAmended()).isFalse();
     }
 }

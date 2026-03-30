@@ -45,6 +45,5 @@ public class NotificationPreferences {
         this.raceStart = raceStart;
         this.resultsPublished = resultsPublished;
         this.scoreAmended = scoreAmended;
-        this.updatedAt = Instant.now();
     }
 }

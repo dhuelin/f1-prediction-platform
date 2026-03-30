@@ -27,6 +27,7 @@ class MigrationTest {
         r.add("spring.datasource.password", postgres::getPassword);
         r.add("spring.rabbitmq.host", () -> "localhost");
         r.add("spring.rabbitmq.port", () -> "5672");
+        r.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
     }
 
     // Spring AMQP uses lazy connections by default in Spring Boot 3, so no real broker is needed.

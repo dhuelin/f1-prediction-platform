@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 @Service
 public class NotificationService {
@@ -77,12 +79,21 @@ public class NotificationService {
     }
 
     private List<DeviceToken> getTokensForPref(Predicate<NotificationPreferences> prefCheck) {
-        return tokenRepository.findAll().stream()
+        List<DeviceToken> allTokens = tokenRepository.findAll();
+        if (allTokens.isEmpty()) return List.of();
+
+        Set<UUID> userIds = allTokens.stream()
+            .map(DeviceToken::getUserId)
+            .collect(Collectors.toSet());
+
+        Map<UUID, NotificationPreferences> prefsByUser = prefsRepository.findByUserIdIn(userIds)
+            .stream()
+            .collect(Collectors.toMap(NotificationPreferences::getUserId, p -> p));
+
+        return allTokens.stream()
             .filter(token -> {
-                UUID uid = token.getUserId();
-                return prefsRepository.findByUserId(uid)
-                    .map(prefCheck::test)
-                    .orElse(true); // default: enabled
+                NotificationPreferences prefs = prefsByUser.get(token.getUserId());
+                return prefs == null || prefCheck.test(prefs); // default: enabled when no row
             })
             .toList();
     }

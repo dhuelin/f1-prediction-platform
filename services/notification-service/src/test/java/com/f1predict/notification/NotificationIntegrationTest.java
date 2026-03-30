@@ -1,6 +1,7 @@
 package com.f1predict.notification;
 
 import com.f1predict.notification.repository.DeviceTokenRepository;
+import com.f1predict.notification.repository.NotificationPreferencesRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -43,12 +44,14 @@ class NotificationIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired DeviceTokenRepository tokenRepository;
+    @Autowired NotificationPreferencesRepository preferencesRepository;
 
     private final UUID userId = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
         tokenRepository.deleteAll();
+        preferencesRepository.deleteAll();
     }
 
     @Test
@@ -92,5 +95,35 @@ class NotificationIntegrationTest {
             .andExpect(status().isNoContent());
 
         assertThat(tokenRepository.findByUserId(userId)).isEmpty();
+    }
+
+    @Test
+    void getPreferences_returnsDefaults_whenNotSet() throws Exception {
+        mockMvc.perform(get("/notifications/preferences")
+                .header("X-User-Id", userId.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.predictionReminder").value(true))
+            .andExpect(jsonPath("$.raceStart").value(true))
+            .andExpect(jsonPath("$.resultsPublished").value(true))
+            .andExpect(jsonPath("$.scoreAmended").value(true));
+    }
+
+    @Test
+    void putPreferences_updatesAndReturns() throws Exception {
+        mockMvc.perform(put("/notifications/preferences")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"predictionReminder":false,"raceStart":true,
+                     "resultsPublished":true,"scoreAmended":false}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.predictionReminder").value(false))
+            .andExpect(jsonPath("$.scoreAmended").value(false));
+
+        // Verify persisted
+        var stored = preferencesRepository.findByUserId(userId);
+        assertThat(stored).isPresent();
+        assertThat(stored.get().isPredictionReminder()).isFalse();
     }
 }

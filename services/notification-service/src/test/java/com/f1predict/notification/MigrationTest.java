@@ -38,7 +38,7 @@ class MigrationTest {
     @Test
     void deviceTokensTableExists() {
         Integer count = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'device_tokens'",
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'device_tokens' AND table_schema = 'public'",
             Integer.class);
         assertThat(count).isEqualTo(1);
     }
@@ -46,7 +46,7 @@ class MigrationTest {
     @Test
     void notificationPreferencesTableExists() {
         Integer count = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'notification_preferences'",
+            "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'notification_preferences' AND table_schema = 'public'",
             Integer.class);
         assertThat(count).isEqualTo(1);
     }

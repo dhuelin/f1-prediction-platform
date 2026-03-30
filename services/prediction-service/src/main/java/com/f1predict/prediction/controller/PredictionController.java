@@ -2,6 +2,7 @@ package com.f1predict.prediction.controller;
 
 import com.f1predict.prediction.dto.BonusBetRequest;
 import com.f1predict.prediction.dto.BonusBetResponse;
+import com.f1predict.prediction.dto.InternalPredictionResponse;
 import com.f1predict.prediction.dto.PredictionResponse;
 import com.f1predict.prediction.dto.SubmitPredictionRequest;
 import com.f1predict.prediction.service.PredictionService;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -39,6 +41,13 @@ public class PredictionController {
             @RequestHeader("X-User-Id") UUID userId,
             @Valid @RequestBody SubmitPredictionRequest request) {
         return predictionService.updatePrediction(userId, raceId, request);
+    }
+
+    @GetMapping("/{raceId}/internal/all")
+    public List<InternalPredictionResponse> getAllLocked(
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
+            @RequestParam(defaultValue = "RACE") @Pattern(regexp = "RACE|SPRINT") String sessionType) {
+        return predictionService.getLockedPredictions(raceId, sessionType);
     }
 
     @PostMapping("/{raceId}/bets")

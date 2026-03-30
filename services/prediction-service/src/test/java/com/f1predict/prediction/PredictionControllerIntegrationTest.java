@@ -1,8 +1,10 @@
 package com.f1predict.prediction;
 
+import com.f1predict.prediction.client.F1DataClient;
 import com.f1predict.prediction.repository.PredictionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,6 +18,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,8 +42,8 @@ class PredictionControllerIntegrationTest {
         registry.add("spring.rabbitmq.port", () -> "5672");
     }
 
-    @MockBean
-    RabbitTemplate rabbitTemplate;
+    @MockBean RabbitTemplate rabbitTemplate;
+    @MockBean F1DataClient f1DataClient;
 
     @Autowired MockMvc mockMvc;
     @Autowired PredictionRepository predictionRepository;
@@ -213,6 +216,72 @@ class PredictionControllerIntegrationTest {
                     {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
                     """))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void submit_beforeDeadline_isAllowed() throws Exception {
+        Mockito.when(f1DataClient.getQualifyingDeadline(raceId))
+            .thenReturn(Instant.now().plusSeconds(3600));
+
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void submit_afterDeadline_returns409() throws Exception {
+        Mockito.when(f1DataClient.getQualifyingDeadline(raceId))
+            .thenReturn(Instant.now().minusSeconds(1));
+
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void update_afterDeadline_returns409() throws Exception {
+        // First submit before deadline
+        Mockito.when(f1DataClient.getQualifyingDeadline(raceId)).thenReturn(null); // no deadline
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isCreated());
+
+        // Now deadline has passed
+        Mockito.when(f1DataClient.getQualifyingDeadline(raceId))
+            .thenReturn(Instant.now().minusSeconds(1));
+
+        mockMvc.perform(put("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["HAM","VER","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isConflict());
+    }
+
+    @Test
+    void submit_deadlineNull_failsOpen() throws Exception {
+        Mockito.when(f1DataClient.getQualifyingDeadline(raceId)).thenReturn(null);
+
+        mockMvc.perform(post("/predictions/" + raceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-User-Id", userId.toString())
+                .content("""
+                    {"rankedDriverCodes":["VER","HAM","LEC","NOR","PIA","RUS","ALO","SAI","GAS","HUL"]}
+                    """))
+            .andExpect(status().isCreated());
     }
 
     @Test

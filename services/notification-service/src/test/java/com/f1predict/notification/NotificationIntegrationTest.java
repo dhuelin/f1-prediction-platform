@@ -207,4 +207,18 @@ class NotificationIntegrationTest {
         org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
             .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
     }
+
+    @Test
+    void raceStartAlert_triggeredByQualifyingSessionComplete() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok6", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        var eventListener = new com.f1predict.notification.listener.NotificationEventListener(notificationService);
+        eventListener.onSessionComplete(new com.f1predict.common.events.SessionCompleteEvent(
+            "2026-06", com.f1predict.common.events.SessionCompleteEvent.SessionType.QUALIFYING, "2026", 6));
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.times(1))
+            .dispatch(org.mockito.Mockito.anyList(),
+                org.mockito.Mockito.argThat(p -> p.title().equals("Race day!")));
+    }
 }

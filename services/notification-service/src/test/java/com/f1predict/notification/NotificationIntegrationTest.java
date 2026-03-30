@@ -45,6 +45,8 @@ class NotificationIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired DeviceTokenRepository tokenRepository;
     @Autowired NotificationPreferencesRepository preferencesRepository;
+    @MockBean com.f1predict.notification.push.PushDispatcher pushDispatcher;
+    @Autowired com.f1predict.notification.service.NotificationService notificationService;
 
     private final UUID userId = UUID.randomUUID();
 
@@ -126,5 +128,33 @@ class NotificationIntegrationTest {
         assertThat(stored).isPresent();
         assertThat(stored.get().isPredictionReminder()).isFalse();
         assertThat(stored.get().isScoreAmended()).isFalse();
+    }
+
+    @Test
+    void onPredictionLocked_sendsReminderToUsersWithPref() {
+        // Register a token for our test user
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok1", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        notificationService.sendPredictionReminder("2026-05");
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.times(1))
+            .dispatch(org.mockito.Mockito.anyList(),
+                org.mockito.Mockito.argThat(p -> p.title().contains("Predictions locked")));
+    }
+
+    @Test
+    void onPredictionLocked_skipsUsersWithPrefDisabled() {
+        // Save token AND disable prediction_reminder
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok2", com.f1predict.notification.model.DeviceToken.Platform.APNS));
+        var prefs = new com.f1predict.notification.model.NotificationPreferences(userId);
+        prefs.update(false, true, true, true);
+        preferencesRepository.save(prefs);
+
+        notificationService.sendPredictionReminder("2026-05");
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
     }
 }

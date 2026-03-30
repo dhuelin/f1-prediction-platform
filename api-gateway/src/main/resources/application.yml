@@ -27,6 +27,10 @@ spring:
           uri: http://scoring-service:8084
           predicates:
             - Path=/scores/**
+        - id: notification-service
+          uri: http://notification-service:8086
+          predicates:
+            - Path=/notifications/**
         - id: web-app
           uri: http://web:80
           predicates:

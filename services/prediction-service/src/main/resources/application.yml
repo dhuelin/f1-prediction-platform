@@ -24,3 +24,4 @@ spring:
 
 services:
   scoring-url: http://localhost:8084
+  f1data-url: http://localhost:8085

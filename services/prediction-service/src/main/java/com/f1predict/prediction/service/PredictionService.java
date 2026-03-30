@@ -1,8 +1,10 @@
 package com.f1predict.prediction.service;
 
+import com.f1predict.prediction.client.F1DataClient;
 import com.f1predict.prediction.client.ScoringClient;
 import com.f1predict.prediction.dto.BonusBetRequest;
 import com.f1predict.prediction.dto.BonusBetResponse;
+import com.f1predict.prediction.dto.InternalPredictionResponse;
 import com.f1predict.prediction.dto.PredictionResponse;
 import com.f1predict.prediction.dto.SubmitPredictionRequest;
 import com.f1predict.prediction.model.BonusBet;
@@ -25,18 +27,30 @@ public class PredictionService {
     private final PredictionRepository predictionRepository;
     private final BonusBetRepository bonusBetRepository;
     private final ScoringClient scoringClient;
+    private final F1DataClient f1DataClient;
 
     public PredictionService(PredictionRepository predictionRepository,
                              BonusBetRepository bonusBetRepository,
-                             ScoringClient scoringClient) {
+                             ScoringClient scoringClient,
+                             F1DataClient f1DataClient) {
         this.predictionRepository = predictionRepository;
         this.bonusBetRepository = bonusBetRepository;
         this.scoringClient = scoringClient;
+        this.f1DataClient = f1DataClient;
+    }
+
+    private void checkDeadline(String raceId) {
+        Instant deadline = f1DataClient.getQualifyingDeadline(raceId);
+        if (deadline != null && Instant.now().isAfter(deadline)) {
+            throw new IllegalStateException("Prediction deadline has passed");
+        }
     }
 
     @Transactional
     public PredictionResponse submitPrediction(UUID userId, String raceId, SubmitPredictionRequest req) {
         String sessionType = req.sessionType() != null ? req.sessionType() : "RACE";
+
+        checkDeadline(raceId);
 
         predictionRepository.findByUserIdAndRaceIdAndSessionType(userId, raceId, sessionType)
             .ifPresent(p -> { throw new IllegalStateException("Prediction already submitted"); });
@@ -58,6 +72,8 @@ public class PredictionService {
     public PredictionResponse updatePrediction(UUID userId, String raceId, SubmitPredictionRequest req) {
         String sessionType = req.sessionType() != null ? req.sessionType() : "RACE";
 
+        checkDeadline(raceId);
+
         Prediction prediction = predictionRepository
             .findByUserIdAndRaceIdAndSessionType(userId, raceId, sessionType)
             .orElseThrow(() -> new NoSuchElementException("No prediction found for this race"));
@@ -78,6 +94,7 @@ public class PredictionService {
     @Transactional
     public BonusBetResponse submitBet(UUID userId, String raceId, String sessionType, UUID leagueId, BonusBetRequest req) {
         String sType = sessionType != null ? sessionType : "RACE";
+        checkDeadline(raceId);
         Prediction prediction = predictionRepository
             .findByUserIdAndRaceIdAndSessionType(userId, raceId, sType)
             .orElseThrow(() -> new NoSuchElementException("No prediction found for this race"));
@@ -98,6 +115,25 @@ public class PredictionService {
         bet.setBetValue(req.betValue());
         BonusBet saved = bonusBetRepository.save(bet);
         return new BonusBetResponse(saved.getId(), saved.getBetType(), saved.getStake(), saved.getBetValue());
+    }
+
+    public List<InternalPredictionResponse> getLockedPredictions(String raceId, String sessionType) {
+        return predictionRepository.findByRaceIdAndSessionTypeAndLockedTrue(raceId, sessionType)
+            .stream()
+            .map(p -> new InternalPredictionResponse(
+                p.getUserId(),
+                p.getSessionType(),
+                p.getEntries().stream()
+                    .sorted(java.util.Comparator.comparingInt(PredictionEntry::getPosition))
+                    .map(PredictionEntry::getDriverCode)
+                    .toList(),
+                p.getBonusBets().stream()
+                    .map(b -> new InternalPredictionResponse.InternalBetData(
+                        b.getBetType().name(), b.getStake(), b.getBetValue()))
+                    .toList(),
+                p.getUpdatedAt()
+            ))
+            .toList();
     }
 
     private List<PredictionEntry> buildEntries(List<String> driverCodes, Prediction prediction) {

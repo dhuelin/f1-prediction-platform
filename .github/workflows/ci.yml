@@ -10,15 +10,18 @@ jobs:
   build-and-test:
     name: Build & Unit Tests
     runs-on: ubuntu-latest
+    container: gradle:8.7-jdk21
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
         with:
-          java-version: "21"
-          distribution: temurin
-          cache: gradle
+          path: |
+            /root/.gradle/caches
+            /root/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: gradle-
 
       - name: Run all unit tests
         run: ./gradlew test --no-daemon -q
@@ -33,6 +36,22 @@ jobs:
     needs: build-and-test
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pre-pull infrastructure images (with retry)
+        run: |
+          pull_with_retry() {
+            local image=$1
+            for i in 1 2 3; do
+              docker pull "$image" && return 0
+              echo "  Pull failed for $image (attempt $i/3), retrying in 15s..."
+              sleep 15
+            done
+            echo "  Could not pull $image after 3 attempts"
+            return 1
+          }
+          pull_with_retry postgres:16-alpine  || exit 1
+          pull_with_retry redis:7-alpine      || exit 1
+          pull_with_retry rabbitmq:3-management-alpine || exit 1
 
       - name: Build and start all services
         run: docker compose up -d --build
@@ -60,13 +79,13 @@ jobs:
             return 1
           }
 
-          wait_healthy auth-service       8081 || exit 1
-          wait_healthy prediction-service 8082 || exit 1
-          wait_healthy league-service     8083 || exit 1
-          wait_healthy scoring-service    8084 || exit 1
-          wait_healthy f1-data-service        8085 || exit 1
-          wait_healthy notification-service  8086 || exit 1
-          wait_healthy api-gateway           8080 || exit 1
+          wait_healthy auth-service         8081 || exit 1
+          wait_healthy prediction-service   8082 || exit 1
+          wait_healthy league-service       8083 || exit 1
+          wait_healthy scoring-service      8084 || exit 1
+          wait_healthy f1-data-service      8085 || exit 1
+          wait_healthy notification-service 8086 || exit 1
+          wait_healthy api-gateway          8080 || exit 1
 
       - name: Smoke test - all routes reachable via api-gateway
         run: |
@@ -85,12 +104,12 @@ jobs:
             return 0
           }
 
-          check_route "/auth"        "http://localhost:8080/auth/api/v1/login"  || exit 1
-          check_route "/predictions" "http://localhost:8080/predictions/"        || exit 1
-          check_route "/leagues"     "http://localhost:8080/leagues/"            || exit 1
-          check_route "/scores"      "http://localhost:8080/scores/"             || exit 1
-          check_route "/f1"           "http://localhost:8080/f1/races"              || exit 1
-          check_route "/notifications" "http://localhost:8080/notifications/health" || exit 1
+          check_route "/auth"          "http://localhost:8080/auth/api/v1/login"     || exit 1
+          check_route "/predictions"   "http://localhost:8080/predictions/"          || exit 1
+          check_route "/leagues"       "http://localhost:8080/leagues/"              || exit 1
+          check_route "/scores"        "http://localhost:8080/scores/"               || exit 1
+          check_route "/f1"            "http://localhost:8080/f1/races"              || exit 1
+          check_route "/notifications" "http://localhost:8080/notifications/health"  || exit 1
 
       - name: Print all service logs on failure
         if: failure()
@@ -103,14 +122,16 @@ jobs:
   mobile-typecheck:
     name: Mobile TypeScript Check
     runs-on: ubuntu-latest
+    container: node:20
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: mobile/package-lock.json
+          path: mobile/node_modules
+          key: npm-${{ hashFiles('mobile/package-lock.json') }}
+          restore-keys: npm-
 
       - name: Install dependencies
         working-directory: mobile

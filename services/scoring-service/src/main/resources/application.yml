@@ -25,3 +25,4 @@ spring:
 services:
   prediction-url: http://localhost:8082
   league-url: http://localhost:8083
+  f1data-url: http://localhost:8085

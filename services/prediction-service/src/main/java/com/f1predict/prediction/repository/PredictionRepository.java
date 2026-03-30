@@ -10,4 +10,5 @@ public interface PredictionRepository extends JpaRepository<Prediction, UUID> {
     Optional<Prediction> findByUserIdAndRaceIdAndSessionType(UUID userId, String raceId, String sessionType);
     List<Prediction> findByRaceIdAndSessionType(String raceId, String sessionType);
     List<Prediction> findByRaceId(String raceId);
+    List<Prediction> findByRaceIdAndSessionTypeAndLockedTrue(String raceId, String sessionType);
 }

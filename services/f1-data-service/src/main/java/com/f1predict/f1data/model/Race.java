@@ -27,6 +27,8 @@ public class Race {
 
     private Instant raceDate;
 
+    private Instant qualifyingDeadline;
+
     @Column(name = "is_sprint_weekend", nullable = false)
     private boolean sprintWeekend = false;
 
@@ -84,6 +86,14 @@ public class Race {
 
     public void setRaceDate(Instant raceDate) {
         this.raceDate = raceDate;
+    }
+
+    public Instant getQualifyingDeadline() {
+        return qualifyingDeadline;
+    }
+
+    public void setQualifyingDeadline(Instant qualifyingDeadline) {
+        this.qualifyingDeadline = qualifyingDeadline;
     }
 
     public boolean isSprintWeekend() {

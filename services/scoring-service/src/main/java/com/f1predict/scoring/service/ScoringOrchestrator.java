@@ -2,6 +2,7 @@ package com.f1predict.scoring.service;
 
 import com.f1predict.common.events.RaceResultFinalEvent;
 import com.f1predict.common.events.SessionCompleteEvent;
+import com.f1predict.scoring.client.F1DataClient;
 import com.f1predict.scoring.client.LeagueClient;
 import com.f1predict.scoring.client.PredictionClient;
 import com.f1predict.scoring.dto.*;
@@ -27,6 +28,7 @@ public class ScoringOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(ScoringOrchestrator.class);
 
     private final PredictionClient predictionClient;
+    private final F1DataClient f1DataClient;
     private final LeagueClient leagueClient;
     private final ProximityScoreEngine proximityEngine;
     private final BonusBetScoreEngine bonusBetEngine;
@@ -35,6 +37,7 @@ public class ScoringOrchestrator {
     private final LeagueStandingRepository standingRepository;
 
     public ScoringOrchestrator(PredictionClient predictionClient,
+                                F1DataClient f1DataClient,
                                 LeagueClient leagueClient,
                                 ProximityScoreEngine proximityEngine,
                                 BonusBetScoreEngine bonusBetEngine,
@@ -42,6 +45,7 @@ public class ScoringOrchestrator {
                                 RaceScoreRepository raceScoreRepository,
                                 LeagueStandingRepository standingRepository) {
         this.predictionClient = predictionClient;
+        this.f1DataClient = f1DataClient;
         this.leagueClient = leagueClient;
         this.proximityEngine = proximityEngine;
         this.bonusBetEngine = bonusBetEngine;
@@ -68,11 +72,14 @@ public class ScoringOrchestrator {
         RaceResultData result = buildResultData(rawResults, fastestLapDriver, safetyCarsDeployed,
                 partialDistance, cancelled);
 
-        List<PredictionData> predictions = predictionClient.getPredictions(raceId, sessionTypeStr);
-        if (predictions.isEmpty()) {
+        List<PredictionData> allPredictions = predictionClient.getPredictions(raceId, sessionTypeStr);
+        if (allPredictions.isEmpty()) {
             log.info("No predictions found for race {} {} — nothing to score", raceId, sessionTypeStr);
             return;
         }
+
+        Instant deadline = f1DataClient.getQualifyingDeadline(raceId);
+        List<PredictionData> predictions = filterLatePredictions(allPredictions, deadline, raceId);
 
         // Collect distinct league IDs from: (a) all known standings, (b) prior scores for this race
         Set<UUID> leagueIds = new LinkedHashSet<>(standingRepository.findDistinctLeagueIds());
@@ -149,6 +156,24 @@ public class ScoringOrchestrator {
 
         raceScoreRepository.saveAll(scores);
         standingsService.recalculate(leagueId, raceId, sessionType);
+    }
+
+    /**
+     * Returns predictions that were submitted before the qualifying deadline.
+     * Predictions with a null updatedAt or a null deadline are always kept (fail open).
+     */
+    private List<PredictionData> filterLatePredictions(List<PredictionData> predictions,
+                                                        Instant deadline,
+                                                        String raceId) {
+        if (deadline == null) return predictions;
+        List<PredictionData> valid = predictions.stream()
+            .filter(p -> p.updatedAt() == null || !p.updatedAt().isAfter(deadline))
+            .toList();
+        int dropped = predictions.size() - valid.size();
+        if (dropped > 0) {
+            log.warn("Dropping {} late prediction(s) for race {} (deadline={})", dropped, raceId, deadline);
+        }
+        return valid;
     }
 
     private RaceResultData buildResultData(List<RaceResultFinalEvent.DriverResult> raw,

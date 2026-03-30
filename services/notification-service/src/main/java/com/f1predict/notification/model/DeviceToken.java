@@ -31,6 +31,11 @@ public class DeviceToken {
 
     protected DeviceToken() {}
 
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = Instant.now();
+    }
+
     public DeviceToken(UUID userId, String token, Platform platform) {
         this.userId = userId;
         this.token = token;

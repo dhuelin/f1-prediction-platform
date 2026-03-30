@@ -22,7 +22,7 @@ public class NotificationController {
 
     record RegisterTokenRequest(
         @NotBlank String token,
-        @Pattern(regexp = "APNS|FCM") String platform
+        @NotBlank @Pattern(regexp = "APNS|FCM") String platform
     ) {}
 
     @PostMapping("/devices")

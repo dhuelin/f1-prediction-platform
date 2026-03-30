@@ -69,6 +69,20 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(resultAmendedQueue).to(f1Exchange).with(RESULT_AMENDED_KEY);
     }
 
+    // DLQ bindings — without these the DirectExchange drops dead-lettered messages
+    @Bean public Binding predictionLockedDlqBinding(Queue predictionLockedDlq, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(predictionLockedDlq).to(deadLetterExchange).with(PREDICTION_LOCKED_QUEUE);
+    }
+    @Bean public Binding sessionCompleteDlqBinding(Queue sessionCompleteDlq, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(sessionCompleteDlq).to(deadLetterExchange).with(SESSION_COMPLETE_QUEUE);
+    }
+    @Bean public Binding raceResultDlqBinding(Queue raceResultDlq, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(raceResultDlq).to(deadLetterExchange).with(RACE_RESULT_QUEUE);
+    }
+    @Bean public Binding resultAmendedDlqBinding(Queue resultAmendedDlq, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(resultAmendedDlq).to(deadLetterExchange).with(RESULT_AMENDED_QUEUE);
+    }
+
     @Bean public Jackson2JsonMessageConverter messageConverter() {
         return new Jackson2JsonMessageConverter();
     }

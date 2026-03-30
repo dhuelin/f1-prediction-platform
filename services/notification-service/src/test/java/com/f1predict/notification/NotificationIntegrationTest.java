@@ -38,6 +38,8 @@ class NotificationIntegrationTest {
         r.add("spring.datasource.password", postgres::getPassword);
         r.add("spring.rabbitmq.host", () -> "localhost");
         r.add("spring.rabbitmq.port", () -> "5672");
+        // Disable listener containers — tests call service methods directly, no broker needed
+        r.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
     }
 
     @MockBean RabbitTemplate rabbitTemplate;

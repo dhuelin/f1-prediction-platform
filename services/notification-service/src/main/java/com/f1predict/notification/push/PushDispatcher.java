@@ -1,6 +1,7 @@
 package com.f1predict.notification.push;
 
 import com.f1predict.notification.model.DeviceToken;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -13,7 +14,8 @@ public class PushDispatcher {
     private final PushProvider apnsProvider;
     private final PushProvider fcmProvider;
 
-    public PushDispatcher(PushProvider apnsProvider, PushProvider fcmProvider) {
+    public PushDispatcher(@Qualifier("apnsProvider") PushProvider apnsProvider,
+                          @Qualifier("fcmProvider") PushProvider fcmProvider) {
         this.apnsProvider = apnsProvider;
         this.fcmProvider = fcmProvider;
     }

@@ -8,14 +8,14 @@ import com.google.firebase.messaging.Notification;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.util.concurrent.MoreExecutors;
+
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.Map;
 
 public class FcmPushProvider implements PushProvider {
 
     private static final Logger log = LoggerFactory.getLogger(FcmPushProvider.class);
-    private static final Executor CALLBACK_EXECUTOR = Executors.newCachedThreadPool();
 
     private final FirebaseMessaging messaging;
 
@@ -30,11 +30,13 @@ public class FcmPushProvider implements PushProvider {
             .setBody(payload.body())
             .build();
 
+        Map<String, String> data = payload.data() != null ? payload.data() : Map.of();
+
         for (String token : tokens) {
             Message message = Message.builder()
                 .setToken(token)
                 .setNotification(notification)
-                .putAllData(payload.data())
+                .putAllData(data)
                 .build();
             ApiFutures.addCallback(messaging.sendAsync(message), new ApiFutureCallback<>() {
                 @Override
@@ -46,7 +48,7 @@ public class FcmPushProvider implements PushProvider {
                 public void onFailure(Throwable ex) {
                     log.error("FCM send failed for token {}", token, ex);
                 }
-            }, CALLBACK_EXECUTOR);
+            }, MoreExecutors.directExecutor());
         }
     }
 }

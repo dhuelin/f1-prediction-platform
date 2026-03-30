@@ -65,9 +65,12 @@ public class PushConfig {
             GoogleCredentials credentials = GoogleCredentials.fromStream(
                 new ByteArrayInputStream(fcmCredentialsJson.getBytes(StandardCharsets.UTF_8)));
             FirebaseOptions options = FirebaseOptions.builder().setCredentials(credentials).build();
-            FirebaseApp app = FirebaseApp.getApps().isEmpty()
-                ? FirebaseApp.initializeApp(options)
-                : FirebaseApp.getInstance();
+            FirebaseApp app;
+            try {
+                app = FirebaseApp.initializeApp(options);
+            } catch (IllegalStateException alreadyInit) {
+                app = FirebaseApp.getInstance();
+            }
             return new FcmPushProvider(FirebaseMessaging.getInstance(app));
         } catch (Exception e) {
             log.error("Failed to initialise FCM client — falling back to no-op", e);

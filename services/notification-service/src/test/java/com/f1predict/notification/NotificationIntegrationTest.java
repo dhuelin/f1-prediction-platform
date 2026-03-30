@@ -1,0 +1,224 @@
+package com.f1predict.notification;
+
+import com.f1predict.notification.repository.DeviceTokenRepository;
+import com.f1predict.notification.repository.NotificationPreferencesRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@Testcontainers
+class NotificationIntegrationTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @DynamicPropertySource
+    static void props(DynamicPropertyRegistry r) {
+        r.add("spring.datasource.url", postgres::getJdbcUrl);
+        r.add("spring.datasource.username", postgres::getUsername);
+        r.add("spring.datasource.password", postgres::getPassword);
+        r.add("spring.rabbitmq.host", () -> "localhost");
+        r.add("spring.rabbitmq.port", () -> "5672");
+        // Disable listener containers — tests call service methods directly, no broker needed
+        r.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
+    }
+
+    @MockBean RabbitTemplate rabbitTemplate;
+
+    @Autowired MockMvc mockMvc;
+    @Autowired DeviceTokenRepository tokenRepository;
+    @Autowired NotificationPreferencesRepository preferencesRepository;
+    @MockBean com.f1predict.notification.push.PushDispatcher pushDispatcher;
+    @Autowired com.f1predict.notification.service.NotificationService notificationService;
+
+    private final UUID userId = UUID.randomUUID();
+
+    @BeforeEach
+    void setUp() {
+        tokenRepository.deleteAll();
+        preferencesRepository.deleteAll();
+    }
+
+    @Test
+    void registerToken_returns201_andPersists() throws Exception {
+        mockMvc.perform(post("/notifications/devices")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"token":"abc123","platform":"FCM"}
+                    """))
+            .andExpect(status().isCreated());
+
+        assertThat(tokenRepository.findByUserId(userId)).hasSize(1);
+    }
+
+    @Test
+    void registerToken_duplicate_isIdempotent() throws Exception {
+        String body = "{\"token\":\"abc123\",\"platform\":\"FCM\"}";
+        mockMvc.perform(post("/notifications/devices")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/notifications/devices")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated());
+
+        assertThat(tokenRepository.findByUserId(userId)).hasSize(1);
+    }
+
+    @Test
+    void deleteToken_removes_fromDb() throws Exception {
+        mockMvc.perform(post("/notifications/devices")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"delete-me\",\"platform\":\"APNS\"}"))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/notifications/devices/delete-me")
+                .header("X-User-Id", userId.toString()))
+            .andExpect(status().isNoContent());
+
+        assertThat(tokenRepository.findByUserId(userId)).isEmpty();
+    }
+
+    @Test
+    void getPreferences_returnsDefaults_whenNotSet() throws Exception {
+        mockMvc.perform(get("/notifications/preferences")
+                .header("X-User-Id", userId.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.predictionReminder").value(true))
+            .andExpect(jsonPath("$.raceStart").value(true))
+            .andExpect(jsonPath("$.resultsPublished").value(true))
+            .andExpect(jsonPath("$.scoreAmended").value(true));
+    }
+
+    @Test
+    void putPreferences_updatesAndReturns() throws Exception {
+        mockMvc.perform(put("/notifications/preferences")
+                .header("X-User-Id", userId.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"predictionReminder":false,"raceStart":true,
+                     "resultsPublished":true,"scoreAmended":false}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.predictionReminder").value(false))
+            .andExpect(jsonPath("$.scoreAmended").value(false));
+
+        // Verify persisted
+        var stored = preferencesRepository.findByUserId(userId);
+        assertThat(stored).isPresent();
+        assertThat(stored.get().isPredictionReminder()).isFalse();
+        assertThat(stored.get().isScoreAmended()).isFalse();
+    }
+
+    @Test
+    void onPredictionLocked_sendsReminderToUsersWithPref() {
+        // Register a token for our test user
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok1", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        notificationService.sendPredictionReminder("2026-05");
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.times(1))
+            .dispatch(org.mockito.Mockito.anyList(),
+                org.mockito.Mockito.argThat(p -> p.title().contains("Predictions locked")));
+    }
+
+    @Test
+    void onPredictionLocked_skipsUsersWithPrefDisabled() {
+        // Save token AND disable prediction_reminder
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok2", com.f1predict.notification.model.DeviceToken.Platform.APNS));
+        var prefs = new com.f1predict.notification.model.NotificationPreferences(userId);
+        prefs.update(false, true, true, true);
+        preferencesRepository.save(prefs);
+
+        notificationService.sendPredictionReminder("2026-05");
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void onRaceResultFinal_sendsResultsPublished() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok3", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        notificationService.sendResultsPublished("2026-06");
+
+        org.mockito.Mockito.verify(pushDispatcher).dispatch(
+            org.mockito.Mockito.anyList(),
+            org.mockito.Mockito.argThat(p -> p.title().equals("Results are in!")
+                && p.data().get("type").equals("RESULTS_PUBLISHED")));
+    }
+
+    @Test
+    void onResultAmended_sendsScoreAmended() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok4", com.f1predict.notification.model.DeviceToken.Platform.APNS));
+
+        notificationService.sendScoreAmended("2026-06", "POST_RACE_DSQ");
+
+        org.mockito.Mockito.verify(pushDispatcher).dispatch(
+            org.mockito.Mockito.anyList(),
+            org.mockito.Mockito.argThat(p -> p.title().equals("Scores updated")
+                && p.data().get("raceId").equals("2026-06")));
+    }
+
+    @Test
+    void noTokensRegistered_noPushDispatched() {
+        // tokenRepository is empty after setUp()
+        notificationService.sendResultsPublished("2026-07");
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void raceStartAlert_onlyOnQualifyingSessionComplete() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok5", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        // RACE session type should NOT trigger race start alert
+        var eventListener = new com.f1predict.notification.listener.NotificationEventListener(notificationService);
+        eventListener.onSessionComplete(new com.f1predict.common.events.SessionCompleteEvent(
+            "2026-06", com.f1predict.common.events.SessionCompleteEvent.SessionType.RACE, "2026", 6));
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void raceStartAlert_triggeredByQualifyingSessionComplete() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok6", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        var eventListener = new com.f1predict.notification.listener.NotificationEventListener(notificationService);
+        eventListener.onSessionComplete(new com.f1predict.common.events.SessionCompleteEvent(
+            "2026-06", com.f1predict.common.events.SessionCompleteEvent.SessionType.QUALIFYING, "2026", 6));
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.times(1))
+            .dispatch(org.mockito.Mockito.anyList(),
+                org.mockito.Mockito.argThat(p -> p.title().equals("Race day!")));
+    }
+}

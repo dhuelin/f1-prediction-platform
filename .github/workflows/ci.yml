@@ -22,6 +22,10 @@ jobs:
 
       - name: Run all unit tests
         run: ./gradlew test --no-daemon -q
+        env:
+          APNS_TEAM_ID: test
+          APNS_KEY_ID: test
+          APNS_BUNDLE_ID: com.f1predict.app
 
   docker-smoke-test:
     name: Docker Compose Smoke Test
@@ -60,8 +64,9 @@ jobs:
           wait_healthy prediction-service 8082 || exit 1
           wait_healthy league-service     8083 || exit 1
           wait_healthy scoring-service    8084 || exit 1
-          wait_healthy f1-data-service    8085 || exit 1
-          wait_healthy api-gateway        8080 || exit 1
+          wait_healthy f1-data-service        8085 || exit 1
+          wait_healthy notification-service  8086 || exit 1
+          wait_healthy api-gateway           8080 || exit 1
 
       - name: Smoke test - all routes reachable via api-gateway
         run: |
@@ -84,7 +89,8 @@ jobs:
           check_route "/predictions" "http://localhost:8080/predictions/"        || exit 1
           check_route "/leagues"     "http://localhost:8080/leagues/"            || exit 1
           check_route "/scores"      "http://localhost:8080/scores/"             || exit 1
-          check_route "/f1"          "http://localhost:8080/f1/races"            || exit 1
+          check_route "/f1"           "http://localhost:8080/f1/races"              || exit 1
+          check_route "/notifications" "http://localhost:8080/notifications/health" || exit 1
 
       - name: Print all service logs on failure
         if: failure()

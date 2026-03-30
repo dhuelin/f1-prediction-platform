@@ -5,6 +5,8 @@ java = "21"
 jjwt = "0.12.5"
 testcontainers = "1.19.8"
 wiremock = "3.6.0"
+pushy = "0.15.4"
+firebase-admin = "9.3.0"
 
 [libraries]
 spring-boot-web = { module = "org.springframework.boot:spring-boot-starter-web" }
@@ -26,6 +28,8 @@ jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
 testcontainers-junit = { module = "org.testcontainers:junit-jupiter", version.ref = "testcontainers" }
 testcontainers-postgresql = { module = "org.testcontainers:postgresql", version.ref = "testcontainers" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+pushy = { module = "com.eatthepath:pushy", version.ref = "pushy" }
+firebase-admin = { module = "com.google.firebase:firebase-admin", version.ref = "firebase-admin" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

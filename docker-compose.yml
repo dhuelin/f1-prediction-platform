@@ -124,6 +124,37 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
+      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+      APNS_TEAM_ID: ""
+      APNS_KEY_ID: ""
+      APNS_BUNDLE_ID: com.f1predict.app
+      APNS_AUTH_KEY: ""
+      FIREBASE_CREDENTIALS_JSON: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
   f1-data-service:
     build:
       context: .
@@ -165,6 +196,8 @@ services:
       scoring-service:
         condition: service_healthy
       f1-data-service:
+        condition: service_healthy
+      notification-service:
         condition: service_healthy
 
   web:

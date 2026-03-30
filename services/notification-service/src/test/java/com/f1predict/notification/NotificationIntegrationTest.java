@@ -73,7 +73,7 @@ class NotificationIntegrationTest {
 
     @Test
     void registerToken_duplicate_isIdempotent() throws Exception {
-        String body = """{"token":"abc123","platform":"FCM"}""";
+        String body = "{\"token\":\"abc123\",\"platform\":\"FCM\"}";
         mockMvc.perform(post("/notifications/devices")
                 .header("X-User-Id", userId.toString())
                 .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -91,7 +91,7 @@ class NotificationIntegrationTest {
         mockMvc.perform(post("/notifications/devices")
                 .header("X-User-Id", userId.toString())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""{"token":"delete-me","platform":"APNS"}"""))
+                .content("{\"token\":\"delete-me\",\"platform\":\"APNS\"}"))
             .andExpect(status().isCreated());
 
         mockMvc.perform(delete("/notifications/devices/delete-me")
@@ -155,6 +155,54 @@ class NotificationIntegrationTest {
         preferencesRepository.save(prefs);
 
         notificationService.sendPredictionReminder("2026-05");
+
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void onRaceResultFinal_sendsResultsPublished() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok3", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        notificationService.sendResultsPublished("2026-06");
+
+        org.mockito.Mockito.verify(pushDispatcher).dispatch(
+            org.mockito.Mockito.anyList(),
+            org.mockito.Mockito.argThat(p -> p.title().equals("Results are in!")
+                && p.data().get("type").equals("RESULTS_PUBLISHED")));
+    }
+
+    @Test
+    void onResultAmended_sendsScoreAmended() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok4", com.f1predict.notification.model.DeviceToken.Platform.APNS));
+
+        notificationService.sendScoreAmended("2026-06", "POST_RACE_DSQ");
+
+        org.mockito.Mockito.verify(pushDispatcher).dispatch(
+            org.mockito.Mockito.anyList(),
+            org.mockito.Mockito.argThat(p -> p.title().equals("Scores updated")
+                && p.data().get("raceId").equals("2026-06")));
+    }
+
+    @Test
+    void noTokensRegistered_noPushDispatched() {
+        // tokenRepository is empty after setUp()
+        notificationService.sendResultsPublished("2026-07");
+        org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
+            .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());
+    }
+
+    @Test
+    void raceStartAlert_onlyOnQualifyingSessionComplete() {
+        tokenRepository.save(new com.f1predict.notification.model.DeviceToken(
+            userId, "tok5", com.f1predict.notification.model.DeviceToken.Platform.FCM));
+
+        // RACE session type should NOT trigger race start alert
+        var eventListener = new com.f1predict.notification.listener.NotificationEventListener(notificationService);
+        eventListener.onSessionComplete(new com.f1predict.common.events.SessionCompleteEvent(
+            "2026-06", com.f1predict.common.events.SessionCompleteEvent.SessionType.RACE, "2026", 6));
 
         org.mockito.Mockito.verify(pushDispatcher, org.mockito.Mockito.never())
             .dispatch(org.mockito.Mockito.anyList(), org.mockito.Mockito.any());

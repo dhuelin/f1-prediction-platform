@@ -34,13 +34,12 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String token = resolveToken(exchange);
+        if (token == null) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
-        String token = authHeader.substring(7);
         try {
             Claims claims = Jwts.parser()
                 .verifyWith(key)
@@ -61,6 +60,20 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
+    }
+
+    // WebSocket clients cannot send Authorization headers during the HTTP upgrade handshake,
+    // so we also accept the JWT via ?token= query param on /ws/** paths.
+    private String resolveToken(ServerWebExchange exchange) {
+        String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
+        }
+        String path = exchange.getRequest().getPath().value();
+        if (path.startsWith("/ws/")) {
+            return exchange.getRequest().getQueryParams().getFirst("token");
+        }
+        return null;
     }
 
     @Override

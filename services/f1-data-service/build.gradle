@@ -7,6 +7,7 @@ dependencies {
     implementation project(':common')
     implementation libs.spring.boot.actuator
     implementation libs.spring.boot.web
+    implementation libs.spring.boot.websocket
     implementation libs.spring.boot.data.jpa
     implementation libs.spring.boot.amqp
     implementation libs.spring.boot.data.redis

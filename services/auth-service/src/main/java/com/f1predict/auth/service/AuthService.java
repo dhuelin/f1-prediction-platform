@@ -10,9 +10,11 @@ import com.f1predict.auth.exception.EmailAlreadyExistsException;
 import com.f1predict.auth.exception.InvalidCredentialsException;
 import com.f1predict.auth.exception.InvalidTokenException;
 import com.f1predict.auth.exception.UsernameAlreadyExistsException;
+import com.f1predict.auth.model.EmailVerificationToken;
 import com.f1predict.auth.model.PasswordResetToken;
 import com.f1predict.auth.model.RefreshToken;
 import com.f1predict.auth.model.User;
+import com.f1predict.auth.repository.EmailVerificationTokenRepository;
 import com.f1predict.auth.repository.PasswordResetTokenRepository;
 import com.f1predict.auth.repository.RefreshTokenRepository;
 import com.f1predict.auth.repository.UserRepository;
@@ -37,6 +39,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final long accessTokenExpiry;
     private final long refreshTokenExpiry;
 
@@ -46,6 +49,7 @@ public class AuthService {
         JwtService jwtService,
         RefreshTokenRepository refreshTokenRepository,
         PasswordResetTokenRepository passwordResetTokenRepository,
+        EmailVerificationTokenRepository emailVerificationTokenRepository,
         @Value("${jwt.access-token-expiry}") long accessTokenExpiry,
         @Value("${jwt.refresh-token-expiry}") long refreshTokenExpiry
     ) {
@@ -54,6 +58,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.accessTokenExpiry = accessTokenExpiry;
         this.refreshTokenExpiry = refreshTokenExpiry;
     }
@@ -71,6 +76,10 @@ public class AuthService {
         user.setUsername(request.username());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         User saved = userRepository.save(user);
+
+        String rawVerification = generateAndPersistEmailVerificationToken(saved);
+        log.info("Email verification token for user {}: {}", saved.getId(), rawVerification);
+
         String rawRefresh = generateRawRefreshToken();
         persistRefreshToken(saved, rawRefresh);
         return new AuthResponse(jwtService.generateAccessToken(saved), rawRefresh, accessTokenExpiry);
@@ -155,6 +164,42 @@ public class AuthService {
         User user = token.getUser();
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+    }
+
+    @Transactional
+    public void verifyEmail(String rawToken) {
+        String hash = hashToken(rawToken);
+        EmailVerificationToken token = emailVerificationTokenRepository.findByTokenHash(hash)
+            .orElseThrow(InvalidTokenException::new);
+        if (token.isUsed() || token.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidTokenException();
+        }
+        token.setUsed(true);
+        emailVerificationTokenRepository.save(token);
+        User user = token.getUser();
+        user.setEmailVerified(true);
+        userRepository.save(user);
+        log.info("Email verified for user {}", user.getId());
+    }
+
+    @Transactional
+    public void resendVerification(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            if (user.isEmailVerified()) return;
+            emailVerificationTokenRepository.deleteAllByUserId(user.getId());
+            String rawToken = generateAndPersistEmailVerificationToken(user);
+            log.info("Resent email verification token for user {}: {}", user.getId(), rawToken);
+        });
+    }
+
+    private String generateAndPersistEmailVerificationToken(User user) {
+        String rawToken = UUID.randomUUID().toString();
+        EmailVerificationToken token = new EmailVerificationToken();
+        token.setUser(user);
+        token.setTokenHash(hashToken(rawToken));
+        token.setExpiresAt(Instant.now().plusSeconds(86_400)); // 24h
+        emailVerificationTokenRepository.save(token);
+        return rawToken;
     }
 
     private String hashToken(String raw) {

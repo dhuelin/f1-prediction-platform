@@ -63,6 +63,18 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/resend-verification")
+    public ResponseEntity<Void> resendVerification(@RequestParam String email) {
+        authService.resendVerification(email);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/oauth/google/callback")
     public AuthResponse googleCallback(@Valid @RequestBody OAuthCallbackRequest request) throws Exception {
         var claims = googleTokenVerifier.verify(request.idToken());

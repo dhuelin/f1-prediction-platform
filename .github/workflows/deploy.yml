@@ -123,6 +123,9 @@ jobs:
         run: |
           scp docker-compose.yml docker-compose.prod.yml \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} mkdir -p /opt/f1predict/infra
+          scp infra/init-db.sql \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/infra/
 
       - name: Pull new images and restart services
         env:

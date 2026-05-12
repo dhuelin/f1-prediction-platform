@@ -6,6 +6,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { HomePage } from '@/pages/HomePage'
+import { LiveRaceDashboardPage } from '@/pages/LiveRaceDashboardPage'
 import { PredictPage } from '@/pages/PredictPage'
 import { LeaguesPage } from '@/pages/LeaguesPage'
 import { LeagueDetailPage } from '@/pages/LeagueDetailPage'
@@ -37,6 +38,14 @@ export const router = createBrowserRouter([
     element: (
       <Protected>
         <HomePage />
+      </Protected>
+    ),
+  },
+  {
+    path: '/races/:raceId/live',
+    element: (
+      <Protected>
+        <LiveRaceDashboardPage />
       </Protected>
     ),
   },

@@ -12,4 +12,12 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     boolean existsByScheduledAtBetweenAndCompletedFalse(Instant from, Instant to);
     boolean existsBySessionTypeAndScheduledAtBetweenAndCompletedFalse(
         Session.SessionType type, Instant from, Instant to);
+
+    @org.springframework.data.jpa.repository.Query(
+        "SELECT s.race.id FROM Session s WHERE s.sessionType = :type " +
+        "AND s.scheduledAt BETWEEN :from AND :to AND s.completed = false")
+    java.util.Optional<String> findActiveRaceIdByType(
+        @org.springframework.data.repository.query.Param("type") Session.SessionType type,
+        @org.springframework.data.repository.query.Param("from") Instant from,
+        @org.springframework.data.repository.query.Param("to") Instant to);
 }

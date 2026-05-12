@@ -14,11 +14,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.f1predict.auth.repository.EmailVerificationTokenRepository;
 import com.f1predict.auth.repository.PasswordResetTokenRepository;
 import com.f1predict.auth.repository.UserRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -39,6 +40,7 @@ class AuthControllerIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired UserRepository userRepository;
     @Autowired PasswordResetTokenRepository passwordResetTokenRepository;
+    @Autowired EmailVerificationTokenRepository emailVerificationTokenRepository;
 
     @MockBean
     com.f1predict.auth.service.GoogleTokenVerifier googleTokenVerifier;
@@ -267,6 +269,95 @@ class AuthControllerIntegrationTest {
                 .content("{\"idToken\":\"fake-apple-repeat\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.accessToken").isNotEmpty());
+    }
+
+    // ── Email Verification ─────────────────────────────────────────────────────
+
+    @Test
+    void register_createsEmailVerificationToken() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"evtest@example.com","username":"evuser","password":"securepass123"}
+                    """))
+            .andExpect(status().isCreated());
+
+        com.f1predict.auth.model.User user = userRepository.findByEmail("evtest@example.com").orElseThrow();
+        assertThat(user.isEmailVerified()).isFalse();
+        // A verification token must exist for this user
+        assertThat(emailVerificationTokenRepository.findAll())
+            .anyMatch(t -> t.getUser().getId().equals(user.getId()) && !t.isUsed());
+    }
+
+    @Test
+    void verifyEmail_withValidToken_marksUserVerified() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"evverify@example.com","username":"evverifyuser","password":"securepass123"}
+                    """))
+            .andExpect(status().isCreated());
+
+        com.f1predict.auth.model.User user = userRepository.findByEmail("evverify@example.com").orElseThrow();
+
+        // Insert known verification token
+        String rawToken = "known-verification-token-abc";
+        String hash = sha256Hex(rawToken);
+        com.f1predict.auth.model.EmailVerificationToken tok = new com.f1predict.auth.model.EmailVerificationToken();
+        tok.setUser(user);
+        tok.setTokenHash(hash);
+        tok.setExpiresAt(java.time.Instant.now().plusSeconds(86_400));
+        emailVerificationTokenRepository.save(tok);
+
+        mockMvc.perform(get("/auth/verify-email").param("token", rawToken))
+            .andExpect(status().isOk());
+
+        com.f1predict.auth.model.User verified = userRepository.findByEmail("evverify@example.com").orElseThrow();
+        assertThat(verified.isEmailVerified()).isTrue();
+    }
+
+    @Test
+    void verifyEmail_withExpiredToken_returns401() throws Exception {
+        com.f1predict.auth.model.User u = new com.f1predict.auth.model.User();
+        u.setEmail("evexpired@example.com");
+        u.setUsername("evexpireduser");
+        u.setPasswordHash("x");
+        userRepository.save(u);
+
+        String rawToken = "expired-verification-token";
+        com.f1predict.auth.model.EmailVerificationToken tok = new com.f1predict.auth.model.EmailVerificationToken();
+        tok.setUser(u);
+        tok.setTokenHash(sha256Hex(rawToken));
+        tok.setExpiresAt(java.time.Instant.now().minusSeconds(1));
+        emailVerificationTokenRepository.save(tok);
+
+        mockMvc.perform(get("/auth/verify-email").param("token", rawToken))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void verifyEmail_withUnknownToken_returns401() throws Exception {
+        mockMvc.perform(get("/auth/verify-email").param("token", "no-such-token"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void resendVerification_forUnverifiedUser_returns200() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"email":"evresend@example.com","username":"evresenduser","password":"securepass123"}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/auth/resend-verification").param("email", "evresend@example.com"))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void resendVerification_forUnknownEmail_stillReturns200() throws Exception {
+        mockMvc.perform(post("/auth/resend-verification").param("email", "nobody@example.com"))
+            .andExpect(status().isOk());
     }
 
     private String sha256Hex(String input) throws Exception {

@@ -15,9 +15,11 @@ spring-boot-security = { module = "org.springframework.boot:spring-boot-starter-
 spring-boot-oauth2-client = { module = "org.springframework.boot:spring-boot-starter-oauth2-client" }
 spring-boot-amqp = { module = "org.springframework.boot:spring-boot-starter-amqp" }
 spring-boot-data-redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
+spring-boot-data-redis-reactive = { module = "org.springframework.boot:spring-boot-starter-data-redis-reactive" }
 spring-boot-test = { module = "org.springframework.boot:spring-boot-starter-test" }
 spring-boot-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-validation = { module = "org.springframework.boot:spring-boot-starter-validation" }
+spring-boot-websocket = { module = "org.springframework.boot:spring-boot-starter-websocket" }
 spring-cloud-gateway = { module = "org.springframework.cloud:spring-cloud-starter-gateway" }
 flyway = { module = "org.flywaydb:flyway-core" }
 flyway-postgres = { module = "org.flywaydb:flyway-database-postgresql" }

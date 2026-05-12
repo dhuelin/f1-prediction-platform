@@ -1,15 +1,20 @@
 package com.f1predict.f1data.service;
 
 import com.f1predict.f1data.client.JolpicaClient;
+import com.f1predict.f1data.client.OpenF1Client;
 import com.f1predict.f1data.dto.jolpica.JolpicaRaceDto;
 import com.f1predict.f1data.model.Session;
 import com.f1predict.f1data.repository.RaceRepository;
 import com.f1predict.f1data.repository.SessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -35,6 +40,27 @@ class RaceCalendarServiceTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
     }
+
+    // --- infrastructure mocks to prevent eager connections during context startup ---
+    // Sprint 5 added LiveSessionService (StringRedisTemplate, OpenF1Client),
+    // LivePositionRedisSubscriber (SimpMessagingTemplate), F1EventPublisher (RabbitTemplate),
+    // and RedisConfig (RedisMessageListenerContainer). Without these mocks the full
+    // Spring context would attempt real connections to Redis/RabbitMQ before any test runs.
+    @MockBean
+    OpenF1Client openF1Client;
+
+    @MockBean
+    StringRedisTemplate stringRedisTemplate;
+
+    @MockBean
+    SimpMessagingTemplate simpMessagingTemplate;
+
+    @MockBean
+    RabbitTemplate rabbitTemplate;
+
+    @MockBean
+    RedisMessageListenerContainer redisMessageListenerContainer;
+    // ---------------------------------------------------------------------------------
 
     @MockBean
     JolpicaClient jolpicaClient;

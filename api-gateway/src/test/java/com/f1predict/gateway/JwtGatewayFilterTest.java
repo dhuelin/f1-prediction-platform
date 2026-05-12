@@ -121,4 +121,63 @@ class JwtGatewayFilterTest {
 
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    // WebSocket upgrade requests cannot carry Authorization headers, so the JWT
+    // is passed as a ?token= query parameter instead.
+
+    @Test
+    void wsPath_withValidTokenQueryParam_passesThrough_andForwardsUserId() {
+        String token = Jwts.builder()
+                .subject("user-ws-1")
+                .signWith(testKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/ws/live/race-42?token=" + token)
+                .header("Upgrade", "websocket")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        String[] capturedUserId = {null};
+        GatewayFilterChain chain = ex -> {
+            capturedUserId[0] = ex.getRequest().getHeaders().getFirst("X-User-Id");
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(capturedUserId[0]).isEqualTo("user-ws-1");
+    }
+
+    @Test
+    void wsPath_withoutToken_returns401() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/ws/live/race-42")
+                .header("Upgrade", "websocket")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> Mono.empty();
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void wsPath_withInvalidTokenQueryParam_returns401() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/ws/live/race-42?token=invalid.jwt.token")
+                .header("Upgrade", "websocket")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> Mono.empty();
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
 }

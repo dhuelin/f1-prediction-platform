@@ -53,6 +53,11 @@ public class LiveSessionService {
         this.driverRepository = driverRepository;
     }
 
+    /** Returns the currently cached OpenF1 session key, or 0 if no session is active. */
+    public synchronized int getActiveSessionKey() {
+        return (cachedSessionKey != 0 && Instant.now().isBefore(cacheExpiresAt)) ? cachedSessionKey : 0;
+    }
+
     public void pollQualifyingState() {
         publishToRedis("Qualifying", new Session.SessionType[]{
             Session.SessionType.QUALIFYING, Session.SessionType.SPRINT_SHOOTOUT},

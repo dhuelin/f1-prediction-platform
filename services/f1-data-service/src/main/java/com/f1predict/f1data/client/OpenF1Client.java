@@ -1,6 +1,8 @@
 package com.f1predict.f1data.client;
 
+import com.f1predict.f1data.dto.openf1.OpenF1LapDto;
 import com.f1predict.f1data.dto.openf1.OpenF1PositionDto;
+import com.f1predict.f1data.dto.openf1.OpenF1RaceControlDto;
 import com.f1predict.f1data.dto.openf1.OpenF1SessionDto;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
@@ -31,6 +33,24 @@ public class OpenF1Client {
             .retrieve()
             .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
             .body(new ParameterizedTypeReference<List<OpenF1PositionDto>>() {});
+        return result != null ? result : Collections.emptyList();
+    }
+
+    public List<OpenF1RaceControlDto> fetchRaceControlMessages(int sessionKey) {
+        var result = restClient.get()
+            .uri("/v1/race_control?session_key={key}", sessionKey)
+            .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
+            .body(new ParameterizedTypeReference<List<OpenF1RaceControlDto>>() {});
+        return result != null ? result : Collections.emptyList();
+    }
+
+    public List<OpenF1LapDto> fetchLaps(int sessionKey) {
+        var result = restClient.get()
+            .uri("/v1/laps?session_key={key}", sessionKey)
+            .retrieve()
+            .onStatus(HttpStatusCode::isError, (req, resp) -> { throw new F1ApiException("F1 API error: " + resp.getStatusCode(), null); })
+            .body(new ParameterizedTypeReference<List<OpenF1LapDto>>() {});
         return result != null ? result : Collections.emptyList();
     }
 }

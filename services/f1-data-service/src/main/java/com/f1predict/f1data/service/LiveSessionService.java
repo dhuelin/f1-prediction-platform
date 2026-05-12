@@ -92,6 +92,35 @@ public class LiveSessionService {
         }
     }
 
+    /**
+     * Returns the latest deduplicated positions for the currently active Race or Sprint session,
+     * falling back to Qualifying if no race session is active.
+     * Returns an empty list when no session is live.
+     */
+    public List<OpenF1PositionDto> fetchCurrentPositions() {
+        int sessionKey = resolveSessionKey("Race", "Sprint");
+        if (sessionKey == 0) {
+            sessionKey = resolveSessionKey("Qualifying", "Sprint Shootout");
+        }
+        if (sessionKey == 0) return List.of();
+
+        List<OpenF1PositionDto> raw;
+        try {
+            raw = openF1Client.fetchLivePositions(sessionKey);
+        } catch (Exception e) {
+            log.warn("fetchCurrentPositions: failed to fetch positions for session {}: {}", sessionKey, e.getMessage());
+            return List.of();
+        }
+
+        Map<Integer, OpenF1PositionDto> latest = new LinkedHashMap<>();
+        for (OpenF1PositionDto p : raw) {
+            if (p.driverNumber() != null && p.position() != null) {
+                latest.put(p.driverNumber(), p);
+            }
+        }
+        return List.copyOf(latest.values());
+    }
+
     // Resolves the OpenF1 session key for an active session of the given types.
     // Caches the result for SESSION_KEY_CACHE_TTL to avoid hammering the sessions API.
     private synchronized int resolveSessionKey(String... sessionTypes) {

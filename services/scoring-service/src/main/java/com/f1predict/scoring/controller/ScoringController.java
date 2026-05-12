@@ -1,9 +1,10 @@
 package com.f1predict.scoring.controller;
 
+import com.f1predict.scoring.dto.ProjectedStandingEntry;
 import com.f1predict.scoring.dto.StandingEntry;
-import com.f1predict.scoring.model.LeagueStanding;
 import com.f1predict.scoring.repository.LeagueStandingRepository;
 import com.f1predict.scoring.repository.RaceScoreRepository;
+import com.f1predict.scoring.service.ProjectedScoreService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -15,11 +16,14 @@ public class ScoringController {
 
     private final LeagueStandingRepository standingRepository;
     private final RaceScoreRepository raceScoreRepository;
+    private final ProjectedScoreService projectedScoreService;
 
     public ScoringController(LeagueStandingRepository standingRepository,
-                              RaceScoreRepository raceScoreRepository) {
+                              RaceScoreRepository raceScoreRepository,
+                              ProjectedScoreService projectedScoreService) {
         this.standingRepository = standingRepository;
         this.raceScoreRepository = raceScoreRepository;
+        this.projectedScoreService = projectedScoreService;
     }
 
     /** Called by Prediction Service for stake validation */
@@ -41,5 +45,17 @@ public class ScoringController {
             .stream()
             .map(s -> new StandingEntry(s.getUserId(), s.getTotalPoints(), s.getRank()))
             .toList();
+    }
+
+    /**
+     * Returns projected race scores based on current live positions.
+     * Not persisted — call repeatedly during a live race for real-time updates.
+     */
+    @GetMapping("/races/{raceId}/projected")
+    public List<ProjectedStandingEntry> getProjectedStandings(
+            @PathVariable String raceId,
+            @RequestParam UUID leagueId,
+            @RequestParam int raceNumber) {
+        return projectedScoreService.computeProjected(raceId, leagueId, raceNumber);
     }
 }

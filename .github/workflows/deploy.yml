@@ -124,7 +124,7 @@ jobs:
           scp docker-compose.yml docker-compose.prod.yml \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            'rm -rf /opt/f1predict/infra/init-db.sql && mkdir -p /opt/f1predict/infra'
+            'docker run --rm -v /opt/f1predict:/host busybox sh -c "rm -rf /host/infra/init-db.sql && mkdir -p /host/infra && chmod 777 /host/infra"'
           scp infra/init-db.sql \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/infra/
 

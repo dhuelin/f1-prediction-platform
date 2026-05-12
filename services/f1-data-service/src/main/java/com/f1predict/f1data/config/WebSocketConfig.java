@@ -12,10 +12,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Clients connect to ws://host:8085/ws or wss://host/ws (via gateway)
-        registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
-                .withSockJS();
+        // Native WebSocket only — SockJS is omitted because auth relies on the
+        // ?token= query param, which SockJS strips when building its sub-paths.
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*");
     }
 
     @Override

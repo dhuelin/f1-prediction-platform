@@ -3,6 +3,7 @@ package com.f1predict.analytics.listener;
 import com.f1predict.analytics.config.RabbitMQConfig;
 import com.f1predict.analytics.model.RaceAnalyticsEvent;
 import com.f1predict.analytics.repository.RaceAnalyticsEventRepository;
+import com.f1predict.analytics.service.AnalyticsIngestionService;
 import com.f1predict.common.events.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,10 +18,14 @@ public class AnalyticsEventListener {
     private static final Logger log = LoggerFactory.getLogger(AnalyticsEventListener.class);
 
     private final RaceAnalyticsEventRepository repository;
+    private final AnalyticsIngestionService ingestionService;
     private final ObjectMapper objectMapper;
 
-    public AnalyticsEventListener(RaceAnalyticsEventRepository repository, ObjectMapper objectMapper) {
+    public AnalyticsEventListener(RaceAnalyticsEventRepository repository,
+                                   AnalyticsIngestionService ingestionService,
+                                   ObjectMapper objectMapper) {
         this.repository = repository;
+        this.ingestionService = ingestionService;
         this.objectMapper = objectMapper;
     }
 
@@ -28,6 +33,7 @@ public class AnalyticsEventListener {
     public void onPredictionLocked(PredictionLockedEvent event) {
         log.info("analytics: PredictionLocked race={} lockedCount={}", event.raceId(), event.lockedCount());
         persist("PREDICTION_LOCKED", event.raceId(), null, toJson(event));
+        ingestionService.recordPredictionLocked(event);
     }
 
     @RabbitListener(queues = RabbitMQConfig.RACE_RESULT_QUEUE)

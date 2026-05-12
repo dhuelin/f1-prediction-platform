@@ -31,6 +31,10 @@ spring:
           uri: http://notification-service:8086
           predicates:
             - Path=/notifications/**
+        - id: analytics-service
+          uri: http://analytics-service:8087
+          predicates:
+            - Path=/analytics/**
         - id: f1-data-service-ws
           uri: ws://f1-data-service:8085
           predicates:

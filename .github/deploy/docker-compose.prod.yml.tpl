@@ -25,6 +25,23 @@ services:
   api-gateway:
     image: IMAGE_PREFIX/api-gateway:IMAGE_TAG
     restart: unless-stopped
+    # In production, only wait for Redis (fast); backend services use service_started
+    # to avoid deadlock when Spring Boot takes 2-3 min to pass healthchecks on cold start
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      prediction-service:
+        condition: service_started
+      league-service:
+        condition: service_started
+      scoring-service:
+        condition: service_started
+      f1-data-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
 
   auth-service:
     image: IMAGE_PREFIX/auth-service:IMAGE_TAG

@@ -10,7 +10,6 @@ dependencies {
     implementation libs.spring.boot.validation
     implementation libs.spring.boot.data.jpa
     implementation libs.spring.boot.amqp
-    implementation libs.spring.boot.data.redis
     implementation libs.flyway
     implementation libs.flyway.postgres
     runtimeOnly libs.postgresql

@@ -52,8 +52,14 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
                 exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
                 return exchange.getResponse().setComplete();
             }
+            // Strip any client-supplied X-User-Id before setting the verified value —
+            // without this a malicious client could inject an arbitrary user ID by setting
+            // the header before the gateway appends the JWT-derived one.
             ServerWebExchange mutated = exchange.mutate()
-                .request(r -> r.header(USER_ID_HEADER, userId))
+                .request(r -> r.headers(headers -> {
+                    headers.remove(USER_ID_HEADER);
+                    headers.add(USER_ID_HEADER, userId);
+                }))
                 .build();
             return chain.filter(mutated);
         } catch (JwtException e) {

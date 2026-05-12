@@ -2,6 +2,26 @@
 # Merge with docker-compose.yml: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
 
 services:
+  # RabbitMQ is slow to start on production VPS — give it more time
+  rabbitmq:
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # Postgres healthcheck — generous for cold start
+  postgres:
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U f1predict"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
   api-gateway:
     image: IMAGE_PREFIX/api-gateway:IMAGE_TAG
     restart: unless-stopped

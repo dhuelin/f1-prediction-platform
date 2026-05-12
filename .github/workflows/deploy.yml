@@ -136,6 +136,13 @@ jobs:
             set -e
             cd /opt/f1predict
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Reset postgres volume if postgres is not yet healthy (safe on first deploy)
+            if ! docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null; then
+              echo "Postgres not healthy — clearing data volume for fresh init"
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml stop postgres 2>/dev/null || true
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
+              docker volume rm f1predict_postgres_data 2>/dev/null || true
+            fi
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull \
               api-gateway auth-service prediction-service league-service \
               scoring-service f1-data-service notification-service analytics-service

@@ -1,0 +1,30 @@
+{
+  "name": "F1 Predict",
+  "subtitle": "Formula 1 Prediction Game",
+  "privacy_url": "https://f1predict.app/privacy",
+  "support_url": "https://f1predict.app/support",
+  "marketing_url": "https://f1predict.app",
+  "categories": ["GAMES_SPORTS", "SPORTS"],
+  "primary_locale": "en-US",
+  "localizations": {
+    "en-US": {
+      "name": "F1 Predict",
+      "subtitle": "Formula 1 Prediction Game",
+      "description": "F1 Predict lets you compete with friends by predicting the top 10 drivers in every Formula 1 race.\n\nCreate or join private leagues, lock in your driver order before qualifying, and watch your score update live as the race unfolds.\n\nFeatures:\n• Predict the top 10 finishing order for every Grand Prix and Sprint race\n• Live race dashboard — see how your picks compare to the real-time positions\n• Private leagues — invite friends and track standings all season\n• Bonus bets — predict the fastest lap, safety cars, and DNFs for extra points\n• Push notifications when predictions lock and results are published",
+      "keywords": "formula 1,f1,racing,prediction,fantasy,grand prix,motorsport,sport",
+      "release_notes": "Initial release of F1 Predict for the 2026 Formula 1 season."
+    }
+  },
+  "age_rating": {
+    "contest_or_sweepstakes": false,
+    "gambling_simulated": false,
+    "gambling_real_money": false,
+    "unrestricted_web_access": false,
+    "sexual_content_or_nudity": "NONE",
+    "violence_cartoon_or_fantasy": "NONE",
+    "profanity_or_crude_humor": "NONE",
+    "alcohol_tobacco_or_drug_use": "NONE",
+    "horror_or_fear_themes": "NONE",
+    "mature_or_suggestive_themes": "NONE"
+  }
+}

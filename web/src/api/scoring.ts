@@ -14,3 +14,21 @@ export async function getAveragePoints(leagueId: string): Promise<AveragePoints>
   )
   return data
 }
+
+export interface ProjectedEntry {
+  userId: string
+  projectedRacePoints: number
+  currentLeaguePoints: number
+}
+
+export async function getProjectedScores(
+  raceId: string,
+  leagueId: string,
+  raceNumber: number,
+): Promise<ProjectedEntry[]> {
+  const { data } = await apiClient.get<ProjectedEntry[]>(
+    `/scores/races/${raceId}/projected`,
+    { params: { leagueId, raceNumber } },
+  )
+  return data
+}

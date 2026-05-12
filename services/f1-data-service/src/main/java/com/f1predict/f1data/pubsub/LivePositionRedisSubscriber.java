@@ -27,8 +27,12 @@ public class LivePositionRedisSubscriber implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             LivePositionEventDto event = objectMapper.readValue(message.getBody(), LivePositionEventDto.class);
-            messagingTemplate.convertAndSend(LIVE_TOPIC + event.sessionKey(), event);
-            log.debug("Relayed live positions for session {} to WS topic", event.sessionKey());
+            // Prefer raceId-based topic so frontend can subscribe by raceId without knowing OpenF1 session keys.
+            String topicSuffix = event.raceId() != null
+                    ? "race/" + event.raceId()
+                    : String.valueOf(event.sessionKey());
+            messagingTemplate.convertAndSend(LIVE_TOPIC + topicSuffix, event);
+            log.debug("Relayed live positions to WS topic {}{}", LIVE_TOPIC, topicSuffix);
         } catch (Exception e) {
             log.warn("Failed to process live position message from Redis: {}", e.getMessage());
         }

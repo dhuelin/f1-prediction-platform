@@ -6,6 +6,10 @@ import com.f1predict.f1data.dto.LivePositionEventDto;
 import com.f1predict.f1data.dto.LivePositionEventDto.DriverPositionDto;
 import com.f1predict.f1data.dto.openf1.OpenF1PositionDto;
 import com.f1predict.f1data.dto.openf1.OpenF1SessionDto;
+import com.f1predict.f1data.model.Driver;
+import com.f1predict.f1data.model.Session;
+import com.f1predict.f1data.repository.DriverRepository;
+import com.f1predict.f1data.repository.SessionRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -20,6 +24,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class LiveSessionService {
@@ -30,30 +35,39 @@ public class LiveSessionService {
     private final OpenF1Client openF1Client;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final SessionRepository sessionRepository;
+    private final DriverRepository driverRepository;
 
     private int cachedSessionKey = 0;
     private Instant cacheExpiresAt = Instant.EPOCH;
 
     public LiveSessionService(OpenF1Client openF1Client,
                               StringRedisTemplate redisTemplate,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              SessionRepository sessionRepository,
+                              DriverRepository driverRepository) {
         this.openF1Client = openF1Client;
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
+        this.sessionRepository = sessionRepository;
+        this.driverRepository = driverRepository;
     }
 
     public void pollQualifyingState() {
-        publishToRedis("Qualifying", "Qualifying", "Sprint Shootout");
+        publishToRedis("Qualifying", new Session.SessionType[]{
+            Session.SessionType.QUALIFYING, Session.SessionType.SPRINT_SHOOTOUT},
+            "Qualifying", "Sprint Shootout");
     }
 
     public void pollLivePositions() {
-        publishToRedis("Race", "Race", "Sprint");
+        publishToRedis("Race", new Session.SessionType[]{
+            Session.SessionType.RACE, Session.SessionType.SPRINT},
+            "Race", "Sprint");
     }
 
-    // Fetches latest positions from OpenF1 and publishes the event to Redis.
-    // All service instances subscribed to the channel will relay it to their WS clients.
-    private void publishToRedis(String logLabel, String... sessionTypes) {
-        int sessionKey = resolveSessionKey(sessionTypes);
+    // Fetches latest positions from OpenF1 and publishes to Redis with raceId + driverCodes.
+    private void publishToRedis(String logLabel, Session.SessionType[] dbTypes, String... openF1Types) {
+        int sessionKey = resolveSessionKey(openF1Types);
         if (sessionKey == 0) {
             log.debug("{} poll: no active OpenF1 session found", logLabel);
             return;
@@ -77,16 +91,25 @@ public class LiveSessionService {
             }
         }
 
+        Map<Integer, String> driverCodeByNumber = driverRepository
+                .findBySeason(Year.now().getValue())
+                .stream()
+                .collect(Collectors.toMap(Driver::getDriverNumber, Driver::getCode));
+
         List<DriverPositionDto> positions = latestByDriver.entrySet().stream()
-                .map(e -> new DriverPositionDto(e.getKey(), e.getValue()))
+                .map(e -> new DriverPositionDto(
+                        e.getKey(),
+                        driverCodeByNumber.getOrDefault(e.getKey(), "UNK"),
+                        e.getValue()))
                 .sorted((a, b) -> Integer.compare(a.position(), b.position()))
                 .toList();
 
-        LivePositionEventDto event = new LivePositionEventDto(sessionKey, Instant.now(), positions);
+        String raceId = resolveActiveRaceId(dbTypes);
+        LivePositionEventDto event = new LivePositionEventDto(sessionKey, raceId, Instant.now(), positions);
         String channel = RedisConfig.LIVE_POSITIONS_CHANNEL_PREFIX + sessionKey;
         try {
             redisTemplate.convertAndSend(channel, objectMapper.writeValueAsString(event));
-            log.debug("{} poll: published {} driver positions to Redis channel {}", logLabel, positions.size(), channel);
+            log.debug("{} poll: published {} positions to Redis (raceId={})", logLabel, positions.size(), raceId);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize live position event: {}", e.getMessage());
         }
@@ -119,6 +142,18 @@ public class LiveSessionService {
             }
         }
         return List.copyOf(latest.values());
+    }
+
+    // Queries the DB for an active session of the given types to resolve the race ID.
+    private String resolveActiveRaceId(Session.SessionType[] types) {
+        Instant now = Instant.now();
+        Instant windowStart = now.minus(3, ChronoUnit.HOURS);
+        Instant windowEnd = now.plus(30, ChronoUnit.MINUTES);
+        for (Session.SessionType type : types) {
+            var opt = sessionRepository.findActiveRaceIdByType(type, windowStart, windowEnd);
+            if (opt.isPresent()) return opt.get();
+        }
+        return null;
     }
 
     // Resolves the OpenF1 session key for an active session of the given types.

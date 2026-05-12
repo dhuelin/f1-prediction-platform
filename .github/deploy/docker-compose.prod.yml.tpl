@@ -56,3 +56,7 @@ services:
   analytics-service:
     image: IMAGE_PREFIX/analytics-service:IMAGE_TAG
     restart: unless-stopped
+
+  # Web frontend is served by Cloudflare Pages in production — exclude it here
+  web:
+    profiles: ["dev"]

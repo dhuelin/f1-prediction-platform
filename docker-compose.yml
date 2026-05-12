@@ -178,6 +178,31 @@ services:
       redis:
         condition: service_healthy
 
+  analytics-service:
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
+    ports:
+      - "8087:8087"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/analytics_db
+      SPRING_DATASOURCE_USERNAME: f1predict
+      SPRING_DATASOURCE_PASSWORD: f1predict
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: f1predict
+      SPRING_RABBITMQ_PASSWORD: f1predict
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8087/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
   api-gateway:
     build:
       context: .

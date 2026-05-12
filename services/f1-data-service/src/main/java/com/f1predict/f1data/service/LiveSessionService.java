@@ -1,13 +1,16 @@
 package com.f1predict.f1data.service;
 
 import com.f1predict.f1data.client.OpenF1Client;
+import com.f1predict.f1data.config.RedisConfig;
 import com.f1predict.f1data.dto.LivePositionEventDto;
 import com.f1predict.f1data.dto.LivePositionEventDto.DriverPositionDto;
 import com.f1predict.f1data.dto.openf1.OpenF1PositionDto;
 import com.f1predict.f1data.dto.openf1.OpenF1SessionDto;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -23,28 +26,33 @@ public class LiveSessionService {
 
     private static final Logger log = LoggerFactory.getLogger(LiveSessionService.class);
     private static final Duration SESSION_KEY_CACHE_TTL = Duration.ofMinutes(5);
-    private static final String LIVE_TOPIC = "/topic/live/";
 
     private final OpenF1Client openF1Client;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     private int cachedSessionKey = 0;
     private Instant cacheExpiresAt = Instant.EPOCH;
 
-    public LiveSessionService(OpenF1Client openF1Client, SimpMessagingTemplate messagingTemplate) {
+    public LiveSessionService(OpenF1Client openF1Client,
+                              StringRedisTemplate redisTemplate,
+                              ObjectMapper objectMapper) {
         this.openF1Client = openF1Client;
-        this.messagingTemplate = messagingTemplate;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     public void pollQualifyingState() {
-        broadcast("Qualifying", "Qualifying", "Sprint Shootout");
+        publishToRedis("Qualifying", "Qualifying", "Sprint Shootout");
     }
 
     public void pollLivePositions() {
-        broadcast("Race", "Race", "Sprint");
+        publishToRedis("Race", "Race", "Sprint");
     }
 
-    private void broadcast(String logLabel, String... sessionTypes) {
+    // Fetches latest positions from OpenF1 and publishes the event to Redis.
+    // All service instances subscribed to the channel will relay it to their WS clients.
+    private void publishToRedis(String logLabel, String... sessionTypes) {
         int sessionKey = resolveSessionKey(sessionTypes);
         if (sessionKey == 0) {
             log.debug("{} poll: no active OpenF1 session found", logLabel);
@@ -75,8 +83,13 @@ public class LiveSessionService {
                 .toList();
 
         LivePositionEventDto event = new LivePositionEventDto(sessionKey, Instant.now(), positions);
-        messagingTemplate.convertAndSend(LIVE_TOPIC + sessionKey, event);
-        log.debug("{} poll: broadcasted {} driver positions for session {}", logLabel, positions.size(), sessionKey);
+        String channel = RedisConfig.LIVE_POSITIONS_CHANNEL_PREFIX + sessionKey;
+        try {
+            redisTemplate.convertAndSend(channel, objectMapper.writeValueAsString(event));
+            log.debug("{} poll: published {} driver positions to Redis channel {}", logLabel, positions.size(), channel);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize live position event: {}", e.getMessage());
+        }
     }
 
     // Resolves the OpenF1 session key for an active session of the given types.

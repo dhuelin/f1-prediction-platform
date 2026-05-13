@@ -146,6 +146,25 @@ jobs:
             fi
           '
 
+      - name: Sync launch page static files
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -e
+            # Sync BEFORE docker compose up so the web-static volume has content on first boot
+            if [ -d /opt/f1predict/web-static/.git ]; then
+              git -C /opt/f1predict/web-static fetch --quiet origin gh-pages
+              git -C /opt/f1predict/web-static reset --hard origin/gh-pages
+            else
+              git clone --quiet --single-branch --branch gh-pages \
+                https://github.com/dhuelin/pitwall-launch.git \
+                /opt/f1predict/web-static
+            fi
+            echo "  launch page: synced ($(ls /opt/f1predict/web-static | wc -l) files)"
+          '
+
       - name: Pull new images and restart services
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -188,25 +207,6 @@ jobs:
             done
           '
 
-      - name: Sync launch page static files
-        env:
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-        run: |
-          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
-            set -e
-            # Pull latest pitwall-launch gh-pages into the volume mount for web-static container
-            if [ -d /opt/f1predict/web-static/.git ]; then
-              git -C /opt/f1predict/web-static fetch --quiet origin gh-pages
-              git -C /opt/f1predict/web-static reset --hard origin/gh-pages
-            else
-              git clone --quiet --single-branch --branch gh-pages \
-                https://github.com/dhuelin/pitwall-launch.git \
-                /opt/f1predict/web-static
-            fi
-            echo "  launch page: synced ($(ls /opt/f1predict/web-static | wc -l) files)"
-          '
-
       - name: Post-deploy smoke test (functional)
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -228,17 +228,18 @@ jobs:
             done
           }
 
-          echo "── 1. Launch page ───────────────────────────────"
+          # Wait for api-gateway / Spring Boot first — covers both API and launch page
+          echo "── 1. Wait for api-gateway (Spring Boot ~2-3 min) ─"
+          wait_for_service "auth-gateway" "${PROD_BASE_URL}/auth/register" || exit 1
+
+          echo "── 2. Launch page ───────────────────────────────"
           PAGE_STATUS=$(curl -s -o /tmp/page.html -w "%{http_code}" --connect-timeout 10 "https://pitwall.guru")
           echo "  pitwall.guru → HTTP $PAGE_STATUS"
-          [ "$PAGE_STATUS" = "200" ] || { echo "FAIL: launch page not served"; exit 1; }
+          [ "$PAGE_STATUS" = "200" ] || { echo "FAIL: launch page not served (HTTP $PAGE_STATUS)"; exit 1; }
           grep -qi "pitwall" /tmp/page.html || { echo "FAIL: page HTML missing Pitwall content"; exit 1; }
           echo "  content: OK"
 
-          echo "── 2. Auth service — wait for Spring Boot ───────"
-          wait_for_service "auth-gateway" "${PROD_BASE_URL}/auth/register" || exit 1
-
-          echo "── 3. Auth service — functional register + token ─"
+          echo "── 3. Auth service — functional register + token ──"
           SMOKE_EMAIL="smoke-${SMOKE_RUN_ID}@pitwall.guru"
           REG=$(curl -s -X POST "${PROD_BASE_URL}/auth/register" \
             -H "Content-Type: application/json" \

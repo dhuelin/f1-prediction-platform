@@ -156,10 +156,10 @@ jobs:
             done
             # Create each database if it does not already exist (safe on every deploy)
             for db in auth_db f1data_db prediction_db league_db scoring_db notification_db analytics_db; do
-              docker exec f1predict-postgres-1 psql -U f1predict -tc \
+              docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tc \
                 "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
                 | grep -q 1 \
-                || docker exec f1predict-postgres-1 psql -U f1predict -c "CREATE DATABASE ${db};"
+                || docker exec f1predict-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
               echo "  ${db}: ready"
             done
           '

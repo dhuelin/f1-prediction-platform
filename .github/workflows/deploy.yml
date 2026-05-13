@@ -119,10 +119,9 @@ jobs:
             -e "s|IMAGE_TAG|sha-${SHA::7}|g" \
             .github/deploy/docker-compose.prod.yml.tpl > docker-compose.prod.yml
 
-      - name: Copy compose and nginx files to server
+      - name: Copy compose files to server
         run: |
           scp docker-compose.yml docker-compose.prod.yml \
-            .github/deploy/nginx-pitwall.conf \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
 
       - name: Bootstrap server .env (generate secrets if missing)
@@ -158,10 +157,12 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull \
               api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service
+              scoring-service f1-data-service notification-service analytics-service \
+              web-static
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans \
               api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service
+              scoring-service f1-data-service notification-service analytics-service \
+              web-static
             docker image prune -f
           '
 
@@ -187,14 +188,14 @@ jobs:
             done
           '
 
-      - name: Sync launch page and update nginx
+      - name: Sync launch page static files
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
             set -e
-            # Pull latest pitwall-launch static site (gh-pages branch)
+            # Pull latest pitwall-launch gh-pages into the volume mount for web-static container
             if [ -d /opt/f1predict/web-static/.git ]; then
               git -C /opt/f1predict/web-static fetch --quiet origin gh-pages
               git -C /opt/f1predict/web-static reset --hard origin/gh-pages
@@ -204,12 +205,6 @@ jobs:
                 /opt/f1predict/web-static
             fi
             echo "  launch page: synced ($(ls /opt/f1predict/web-static | wc -l) files)"
-
-            # Install nginx config and reload
-            sudo cp /opt/f1predict/nginx-pitwall.conf /etc/nginx/sites-available/pitwall
-            sudo nginx -t
-            sudo systemctl reload nginx
-            echo "  nginx: reloaded"
           '
 
       - name: Post-deploy smoke test (functional)

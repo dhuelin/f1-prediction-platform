@@ -94,6 +94,14 @@ services:
     image: IMAGE_PREFIX/analytics-service:IMAGE_TAG
     restart: unless-stopped
 
-  # Web frontend is served by Cloudflare Pages in production — exclude it here
+  # Pitwall launch page — served from nginx:alpine mounting the pitwall-launch gh-pages clone
+  # The api-gateway routes /** to this container so pitwall.guru/ shows the landing page
+  web-static:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./web-static:/usr/share/nginx/html:ro
+
+  # Full web app is dev-only (React/Vite build served locally); excluded from VPS
   web:
     profiles: ["dev"]

@@ -19,6 +19,22 @@ import java.nio.charset.StandardCharsets;
 public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
     private static final String USER_ID_HEADER = "X-User-Id";
+
+    /**
+     * API path prefixes that require a valid JWT.
+     * Everything else (auth endpoints, static web assets, etc.) passes through unauthenticated.
+     * Add a prefix here when you add a new protected backend service.
+     */
+    private static final java.util.List<String> PROTECTED_PREFIXES = java.util.List.of(
+        "/f1/",
+        "/predictions/",
+        "/leagues/",
+        "/scores/",
+        "/notifications/",
+        "/analytics/",
+        "/ws/"
+    );
+
     private final SecretKey key;
 
     public JwtGatewayFilter(@Value("${jwt.secret}") String secret) {
@@ -29,8 +45,10 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
 
-        // /auth and /auth/** are public — skip JWT validation
-        if (path.equals("/auth") || path.startsWith("/auth/")) {
+        // Only apply JWT validation to known protected API prefixes.
+        // /auth/** and all static web assets pass through without a token.
+        boolean requiresAuth = PROTECTED_PREFIXES.stream().anyMatch(path::startsWith);
+        if (!requiresAuth) {
             return chain.filter(exchange);
         }
 

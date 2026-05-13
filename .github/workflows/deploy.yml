@@ -124,6 +124,28 @@ jobs:
           scp docker-compose.yml docker-compose.prod.yml \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
 
+      - name: Bootstrap server .env (generate secrets if missing)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            touch /opt/f1predict/.env
+            cd /opt/f1predict
+            # Generate JWT_SECRET if not already set to a non-empty value
+            if ! grep -q "^JWT_SECRET=.\+" .env 2>/dev/null; then
+              JWT_SECRET=$(openssl rand -base64 48)
+              if grep -q "^JWT_SECRET=" .env 2>/dev/null; then
+                sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" .env
+              else
+                echo "JWT_SECRET=${JWT_SECRET}" >> .env
+              fi
+              echo "  JWT_SECRET: generated"
+            else
+              echo "  JWT_SECRET: already set"
+            fi
+          '
+
       - name: Pull new images and restart services
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}

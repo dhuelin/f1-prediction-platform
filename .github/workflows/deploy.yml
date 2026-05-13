@@ -124,6 +124,28 @@ jobs:
           scp docker-compose.yml docker-compose.prod.yml \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
 
+      - name: Bootstrap server .env (generate secrets if missing)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            touch /opt/f1predict/.env
+            cd /opt/f1predict
+            # Generate JWT_SECRET if not already set to a non-empty value
+            if ! grep -q "^JWT_SECRET=.\+" .env 2>/dev/null; then
+              JWT_SECRET=$(openssl rand -base64 48)
+              if grep -q "^JWT_SECRET=" .env 2>/dev/null; then
+                sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${JWT_SECRET}|" .env
+              else
+                echo "JWT_SECRET=${JWT_SECRET}" >> .env
+              fi
+              echo "  JWT_SECRET: generated"
+            else
+              echo "  JWT_SECRET: already set"
+            fi
+          '
+
       - name: Pull new images and restart services
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -140,6 +162,28 @@ jobs:
               api-gateway auth-service prediction-service league-service \
               scoring-service f1-data-service notification-service analytics-service
             docker image prune -f
+          '
+
+      - name: Initialise databases (idempotent)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            # Wait for postgres to be ready (up to 60s)
+            for i in $(seq 1 12); do
+              docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null && break
+              echo "Waiting for postgres... ($i/12)"
+              sleep 5
+            done
+            # Create each database if it does not already exist (safe on every deploy)
+            for db in auth_db f1data_db prediction_db league_db scoring_db notification_db analytics_db; do
+              docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tc \
+                "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
+                | grep -q 1 \
+                || docker exec f1predict-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
+              echo "  ${db}: ready"
+            done
           '
 
       - name: Post-deploy smoke test

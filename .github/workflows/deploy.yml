@@ -220,7 +220,8 @@ jobs:
             for attempt in $(seq 1 10); do
               status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$url")
               echo "  $label → HTTP $status (attempt $attempt/10)"
-              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[234]$"; then
+              # 500 = Spring Boot started but still initialising (Flyway, DB connections) — retry
+              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[0234]$"; then
                 [ "$attempt" -lt 10 ] && sleep 20 || return 1
               else
                 return 0
@@ -241,14 +242,16 @@ jobs:
 
           echo "── 3. Auth service — functional register + token ──"
           SMOKE_EMAIL="smoke-${SMOKE_RUN_ID}@pitwall.guru"
-          REG=$(curl -s -X POST "${PROD_BASE_URL}/auth/register" \
-            -H "Content-Type: application/json" \
-            -d "{\"email\":\"${SMOKE_EMAIL}\",\"password\":\"SmokeTest1!\",\"username\":\"smoke${SMOKE_RUN_ID}\"}")
-          TOKEN=$(echo "$REG" | grep -o '"accessToken":"[^"]*"' | sed 's/"accessToken":"//;s/"//')
-          if [ -z "$TOKEN" ]; then
-            echo "  register failed, body: $REG"
-            exit 1
-          fi
+          TOKEN=""
+          for reg_attempt in $(seq 1 5); do
+            REG=$(curl -s -X POST "${PROD_BASE_URL}/auth/register" \
+              -H "Content-Type: application/json" \
+              -d "{\"email\":\"${SMOKE_EMAIL}\",\"password\":\"SmokeTest1!\",\"username\":\"smoke${SMOKE_RUN_ID}\"}")
+            TOKEN=$(echo "$REG" | grep -o '"accessToken":"[^"]*"' | sed 's/"accessToken":"//;s/"//')
+            [ -n "$TOKEN" ] && break
+            echo "  register attempt $reg_attempt failed (retrying in 15s): $(echo "$REG" | head -c 120)"
+            [ "$reg_attempt" -lt 5 ] && sleep 15 || { echo "FAIL: could not obtain token after 5 attempts"; exit 1; }
+          done
           echo "  register → token acquired (${#TOKEN} chars)"
 
           echo "── 4. F1 data service — authenticated call ───────"

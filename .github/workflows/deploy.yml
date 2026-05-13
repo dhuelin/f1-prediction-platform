@@ -123,10 +123,6 @@ jobs:
         run: |
           scp docker-compose.yml docker-compose.prod.yml \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            'docker run --rm -v /opt/f1predict:/host busybox sh -c "rm -rf /host/infra/init-db.sql && mkdir -p /host/infra && chmod 777 /host/infra"'
-          scp infra/init-db.sql \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/infra/
 
       - name: Pull new images and restart services
         env:
@@ -137,13 +133,6 @@ jobs:
             set -e
             cd /opt/f1predict
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # Reset postgres volume if postgres is not yet healthy (safe on first deploy)
-            if ! docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null; then
-              echo "Postgres not healthy — clearing data volume for fresh init"
-              docker compose -f docker-compose.yml -f docker-compose.prod.yml stop postgres 2>/dev/null || true
-              docker compose -f docker-compose.yml -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
-              docker volume rm f1predict_postgres_data 2>/dev/null || true
-            fi
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull \
               api-gateway auth-service prediction-service league-service \
               scoring-service f1-data-service notification-service analytics-service
@@ -151,6 +140,28 @@ jobs:
               api-gateway auth-service prediction-service league-service \
               scoring-service f1-data-service notification-service analytics-service
             docker image prune -f
+          '
+
+      - name: Initialise databases (idempotent)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            # Wait for postgres to be ready (up to 60s)
+            for i in $(seq 1 12); do
+              docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null && break
+              echo "Waiting for postgres... ($i/12)"
+              sleep 5
+            done
+            # Create each database if it does not already exist (safe on every deploy)
+            for db in auth_db f1data_db prediction_db league_db scoring_db notification_db analytics_db; do
+              docker exec f1predict-postgres-1 psql -U f1predict -tc \
+                "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
+                | grep -q 1 \
+                || docker exec f1predict-postgres-1 psql -U f1predict -c "CREATE DATABASE ${db};"
+              echo "  ${db}: ready"
+            done
           '
 
       - name: Post-deploy smoke test

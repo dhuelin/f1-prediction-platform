@@ -25,6 +25,8 @@ services:
   api-gateway:
     image: IMAGE_PREFIX/api-gateway:IMAGE_TAG
     restart: unless-stopped
+    environment:
+      JWT_SECRET: "${JWT_SECRET}"
     # In production, only wait for Redis (fast); backend services use service_started
     # to avoid deadlock when Spring Boot takes 2-3 min to pass healthchecks on cold start
     depends_on:

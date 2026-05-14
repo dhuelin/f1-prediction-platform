@@ -54,19 +54,22 @@ jobs:
           pull_with_retry rabbitmq:3-management-alpine || exit 1
 
       - name: Build and start all services
-        run: docker compose up -d --build
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
         timeout-minutes: 15
 
       - name: Wait for all services to pass health checks
         run: |
+          # wait_healthy <name> <port> [<context-path>]
+          # context-path defaults to empty (most services); f1-data-service uses /f1
           wait_healthy() {
             local name=$1
             local port=$2
-            echo "Waiting for $name (/actuator/health on $port)..."
+            local ctx=${3:-}
+            echo "Waiting for $name (${ctx}/actuator/health on $port)..."
             for i in $(seq 1 60); do
               local status
               status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 3 \
-                "http://localhost:${port}/actuator/health" 2>/dev/null || echo "000")
+                "http://localhost:${port}${ctx}/actuator/health" 2>/dev/null || echo "000")
               if [ "$status" = "200" ]; then
                 echo "  $name is healthy"
                 return 0
@@ -75,18 +78,18 @@ jobs:
               sleep 5
             done
             echo "  $name did not become healthy after 5 minutes"
-            docker compose logs "$name" --tail=30
+            docker compose -f docker-compose.yml -f docker-compose.dev.yml logs "$name" --tail=30
             return 1
           }
 
-          wait_healthy auth-service         8081 || exit 1
-          wait_healthy prediction-service   8082 || exit 1
-          wait_healthy league-service       8083 || exit 1
-          wait_healthy scoring-service      8084 || exit 1
-          wait_healthy f1-data-service      8085 || exit 1
-          wait_healthy notification-service 8086 || exit 1
-          wait_healthy analytics-service   8087 || exit 1
-          wait_healthy api-gateway         8080 || exit 1
+          wait_healthy auth-service         8081     || exit 1
+          wait_healthy prediction-service   8082     || exit 1
+          wait_healthy league-service       8083     || exit 1
+          wait_healthy scoring-service      8084     || exit 1
+          wait_healthy f1-data-service      8085 /f1 || exit 1
+          wait_healthy notification-service 8086     || exit 1
+          wait_healthy analytics-service   8087      || exit 1
+          wait_healthy api-gateway         8080      || exit 1
 
       - name: Smoke test - all routes reachable via api-gateway
         run: |
@@ -115,11 +118,11 @@ jobs:
 
       - name: Print all service logs on failure
         if: failure()
-        run: docker compose logs --tail=50
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail=50
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 
   mobile-typecheck:
     name: Mobile TypeScript Check

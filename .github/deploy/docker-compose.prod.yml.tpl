@@ -25,6 +25,8 @@ services:
   api-gateway:
     image: IMAGE_PREFIX/api-gateway:IMAGE_TAG
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
       JWT_SECRET: "${JWT_SECRET}"
     # In production, only wait for Redis (fast); backend services use service_started

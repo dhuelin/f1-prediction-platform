@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: f1predict
       POSTGRES_PASSWORD: f1predict
       POSTGRES_DB: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/init-db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -18,8 +16,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -28,9 +24,6 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: f1predict
       RABBITMQ_DEFAULT_PASS: f1predict
@@ -44,8 +37,6 @@ services:
     build:
       context: .
       dockerfile: services/auth-service/Dockerfile
-    ports:
-      - "8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -64,8 +55,6 @@ services:
     build:
       context: .
       dockerfile: services/prediction-service/Dockerfile
-    ports:
-      - "8082:8082"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/prediction_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -85,8 +74,6 @@ services:
     build:
       context: .
       dockerfile: services/league-service/Dockerfile
-    ports:
-      - "8083:8083"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/league_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -106,8 +93,6 @@ services:
     build:
       context: .
       dockerfile: services/scoring-service/Dockerfile
-    ports:
-      - "8084:8084"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scoring_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -128,8 +113,6 @@ services:
     build:
       context: .
       dockerfile: services/notification-service/Dockerfile
-    ports:
-      - "8086:8086"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -159,8 +142,6 @@ services:
     build:
       context: .
       dockerfile: services/f1-data-service/Dockerfile
-    ports:
-      - "8085:8085"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/f1data_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -182,8 +163,6 @@ services:
     build:
       context: .
       dockerfile: services/analytics-service/Dockerfile
-    ports:
-      - "8087:8087"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/analytics_db
       SPRING_DATASOURCE_USERNAME: f1predict
@@ -207,8 +186,6 @@ services:
     build:
       context: .
       dockerfile: api-gateway/Dockerfile
-    ports:
-      - "8080:8080"
     environment:
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
       SPRING_DATA_REDIS_HOST: redis
@@ -216,22 +193,20 @@ services:
       redis:
         condition: service_healthy
       auth-service:
-        condition: service_healthy
+        condition: service_started
       prediction-service:
-        condition: service_healthy
+        condition: service_started
       league-service:
-        condition: service_healthy
+        condition: service_started
       scoring-service:
-        condition: service_healthy
+        condition: service_started
       f1-data-service:
-        condition: service_healthy
+        condition: service_started
       notification-service:
-        condition: service_healthy
+        condition: service_started
 
   web:
     build: ./web
-    ports:
-      - "3000:80"
     environment:
       # VITE vars are baked in at build time by Vite — api-gateway is a Docker-internal
       # hostname the browser cannot resolve, so use the host-mapped port instead.

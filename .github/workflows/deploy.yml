@@ -214,15 +214,16 @@ jobs:
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
           # Helper: retry a plain HTTP check (for gateway/startup errors)
+          # 30 attempts × 20s = 600s (10 min) — Spring Boot on VPS can take 4-5 min cold
           wait_for_service() {
             local label=$1 url=$2
             local status attempt
-            for attempt in $(seq 1 10); do
+            for attempt in $(seq 1 30); do
               status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$url")
-              echo "  $label → HTTP $status (attempt $attempt/10)"
-              # 500 = Spring Boot started but still initialising (Flyway, DB connections) — retry
-              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[0234]$"; then
-                [ "$attempt" -lt 10 ] && sleep 20 || return 1
+              echo "  $label → HTTP $status (attempt $attempt/30)"
+              # 502/503 = gateway up but upstream still starting — keep waiting
+              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[234]$"; then
+                [ "$attempt" -lt 30 ] && sleep 20 || return 1
               else
                 return 0
               fi
@@ -405,14 +406,20 @@ jobs:
           TEST_BASE_URL: ${{ vars.TEST_BASE_URL }}
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
+          # Skip smoke test entirely if TEST_BASE_URL isn't configured yet
+          if [ -z "${TEST_BASE_URL}" ]; then
+            echo "TEST_BASE_URL not set — skipping test env smoke test (set vars.TEST_BASE_URL to enable)"
+            exit 0
+          fi
+
           wait_for_service() {
             local label=$1 url=$2
             local status attempt
-            for attempt in $(seq 1 10); do
+            for attempt in $(seq 1 30); do
               status=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$url")
-              echo "  $label → HTTP $status (attempt $attempt/10)"
-              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[0234]$"; then
-                [ "$attempt" -lt 10 ] && sleep 20 || return 1
+              echo "  $label → HTTP $status (attempt $attempt/30)"
+              if [ "$status" = "000" ] || echo "$status" | grep -qE "^50[234]$"; then
+                [ "$attempt" -lt 30 ] && sleep 20 || return 1
               else
                 return 0
               fi

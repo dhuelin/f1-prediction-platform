@@ -25,6 +25,9 @@ public class Race {
     @Column(nullable = false, length = 100)
     private String country;
 
+    @Column(length = 100)
+    private String city;
+
     private Instant raceDate;
 
     private Instant qualifyingDeadline;
@@ -78,6 +81,14 @@ public class Race {
 
     public void setCountry(String country) {
         this.country = country;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
     }
 
     public Instant getRaceDate() {

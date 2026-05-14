@@ -1,0 +1,56 @@
+# Local development overrides — adds host port bindings so you can connect directly
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Services reach each other via Docker network (no host ports needed for that).
+# These ports are only for direct access from your dev machine: psql, redis-cli,
+# RabbitMQ management UI, curl to individual services, etc.
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  auth-service:
+    ports:
+      - "8081:8081"
+
+  prediction-service:
+    ports:
+      - "8082:8082"
+
+  league-service:
+    ports:
+      - "8083:8083"
+
+  scoring-service:
+    ports:
+      - "8084:8084"
+
+  f1-data-service:
+    ports:
+      - "8085:8085"
+
+  notification-service:
+    ports:
+      - "8086:8086"
+
+  analytics-service:
+    ports:
+      - "8087:8087"
+
+  api-gateway:
+    ports:
+      - "8080:8080"
+
+  web:
+    ports:
+      - "3000:80"

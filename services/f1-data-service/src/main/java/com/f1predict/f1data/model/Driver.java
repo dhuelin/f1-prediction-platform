@@ -21,6 +21,9 @@ public class Driver {
     @Column(length = 50)
     private String nationality;
 
+    @Column(length = 100)
+    private String constructorName;
+
     @Column(nullable = false)
     private int season;
 
@@ -62,6 +65,14 @@ public class Driver {
 
     public void setNationality(String nationality) {
         this.nationality = nationality;
+    }
+
+    public String getConstructorName() {
+        return constructorName;
+    }
+
+    public void setConstructorName(String constructorName) {
+        this.constructorName = constructorName;
     }
 
     public int getSeason() {

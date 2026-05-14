@@ -298,9 +298,9 @@ jobs:
 
       - name: Copy compose files to test server
         run: |
-          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'mkdir -p /opt/f1predict-test'
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'mkdir -p ~/f1predict-test'
           scp docker-compose.yml docker-compose.test.yml \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict-test/
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:~/f1predict-test/
 
       - name: Bootstrap test .env (generate secrets if missing)
         env:
@@ -308,8 +308,8 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
-            touch /opt/f1predict-test/.env
-            cd /opt/f1predict-test
+            touch ~/f1predict-test/.env
+            cd ~/f1predict-test
             if ! grep -q "^JWT_SECRET=.\+" .env 2>/dev/null; then
               JWT_SECRET=$(openssl rand -base64 48)
               if grep -q "^JWT_SECRET=" .env 2>/dev/null; then
@@ -330,15 +330,15 @@ jobs:
         run: |
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
             set -e
-            if [ -d /opt/f1predict-test/web-static/.git ]; then
-              git -C /opt/f1predict-test/web-static fetch --quiet origin gh-pages
-              git -C /opt/f1predict-test/web-static reset --hard origin/gh-pages
+            if [ -d ~/f1predict-test/web-static/.git ]; then
+              git -C ~/f1predict-test/web-static fetch --quiet origin gh-pages
+              git -C ~/f1predict-test/web-static reset --hard origin/gh-pages
             else
               git clone --quiet --single-branch --branch gh-pages \
                 https://github.com/dhuelin/pitwall-launch.git \
-                /opt/f1predict-test/web-static
+                ~/f1predict-test/web-static
             fi
-            echo "  launch page: synced ($(ls /opt/f1predict-test/web-static | wc -l) files)"
+            echo "  launch page: synced ($(ls ~/f1predict-test/web-static | wc -l) files)"
           '
 
       - name: Pull new images and restart test services
@@ -348,7 +348,7 @@ jobs:
         run: |
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
             set -e
-            cd /opt/f1predict-test
+            cd ~/f1predict-test
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose --project-name f1predict-test -f docker-compose.yml -f docker-compose.test.yml pull \
               api-gateway auth-service prediction-service league-service \
@@ -393,7 +393,7 @@ jobs:
             else
               echo "::warning::nginx not yet configured for test.pitwall.guru."
               echo "  One-time setup required (run once as root on the VPS):"
-              echo "    sudo cp /opt/f1predict-test/../nginx-test.conf /etc/nginx/sites-enabled/nginx-test.conf"
+              echo "    sudo cp ~/f1predict-test/../nginx-test.conf /etc/nginx/sites-enabled/nginx-test.conf"
               echo "    sudo nginx -t && sudo systemctl reload nginx"
               echo "  Config file: .github/deploy/nginx-test.conf in this repo"
               echo "  Until then, test API is available at http://$(hostname -I | awk '"'"'{print $1}'"'"'):8090"

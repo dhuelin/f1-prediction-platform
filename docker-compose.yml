@@ -193,17 +193,17 @@ services:
       redis:
         condition: service_healthy
       auth-service:
-        condition: service_healthy
+        condition: service_started
       prediction-service:
-        condition: service_healthy
+        condition: service_started
       league-service:
-        condition: service_healthy
+        condition: service_started
       scoring-service:
-        condition: service_healthy
+        condition: service_started
       f1-data-service:
-        condition: service_healthy
+        condition: service_started
       notification-service:
-        condition: service_healthy
+        condition: service_started
 
   web:
     build: ./web

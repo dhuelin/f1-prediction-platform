@@ -27,3 +27,7 @@ yarn-error.log*
 
 # Misc
 .superpowers/
+
+# Claude Code local session files (contain OAuth tokens, never commit)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

@@ -9,6 +9,7 @@ import com.f1predict.prediction.service.PredictionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Pattern;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -48,6 +49,26 @@ public class PredictionController {
             @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
             @RequestParam(defaultValue = "RACE") @Pattern(regexp = "RACE|SPRINT") String sessionType) {
         return predictionService.getLockedPredictions(raceId, sessionType);
+    }
+
+    // #160 — Retrieve current user's prediction for a race (pre-populates UI before deadline)
+    @GetMapping("/{raceId}")
+    public ResponseEntity<PredictionResponse> get(
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestParam(defaultValue = "RACE") @Pattern(regexp = "RACE|SPRINT") String sessionType) {
+        return predictionService.getPrediction(userId, raceId, sessionType)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // #160 — Retrieve existing bonus bets for a race
+    @GetMapping("/{raceId}/bets")
+    public List<BonusBetResponse> getBets(
+            @PathVariable @Pattern(regexp = "^[A-Z0-9_-]{3,20}$") String raceId,
+            @RequestHeader("X-User-Id") UUID userId,
+            @RequestParam(defaultValue = "RACE") @Pattern(regexp = "RACE|SPRINT") String sessionType) {
+        return predictionService.getBets(userId, raceId, sessionType);
     }
 
     @PostMapping("/{raceId}/bets")

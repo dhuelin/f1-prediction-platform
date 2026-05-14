@@ -26,6 +26,7 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
      * Add a prefix here when you add a new protected backend service.
      */
     private static final java.util.List<String> PROTECTED_PREFIXES = java.util.List.of(
+        "/auth/me",           // current-user profile — must stay before /auth/ catch-all
         "/f1/",
         "/predictions/",
         "/leagues/",

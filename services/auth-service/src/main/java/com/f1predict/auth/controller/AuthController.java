@@ -7,6 +7,7 @@ import com.f1predict.auth.dto.OAuthCallbackRequest;
 import com.f1predict.auth.dto.RefreshRequest;
 import com.f1predict.auth.dto.RegisterRequest;
 import com.f1predict.auth.dto.ResetPasswordRequest;
+import com.f1predict.auth.dto.UserProfileResponse;
 import com.f1predict.auth.model.OAuthAccount;
 import com.f1predict.auth.service.AppleTokenVerifier;
 import com.f1predict.auth.service.AuthService;
@@ -16,6 +17,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/auth")
@@ -73,6 +76,14 @@ public class AuthController {
     public ResponseEntity<Void> resendVerification(@RequestParam String email) {
         authService.resendVerification(email);
         return ResponseEntity.ok().build();
+    }
+
+    // #161 — Current user profile (gateway injects X-User-Id from validated JWT)
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileResponse> me(@RequestHeader("X-User-Id") UUID userId) {
+        return authService.getProfile(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/oauth/google/callback")

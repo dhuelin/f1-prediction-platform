@@ -6,6 +6,7 @@ import com.f1predict.auth.dto.LoginRequest;
 import com.f1predict.auth.dto.RefreshRequest;
 import com.f1predict.auth.dto.RegisterRequest;
 import com.f1predict.auth.dto.ResetPasswordRequest;
+import com.f1predict.auth.dto.UserProfileResponse;
 import com.f1predict.auth.exception.EmailAlreadyExistsException;
 import com.f1predict.auth.exception.InvalidCredentialsException;
 import com.f1predict.auth.exception.InvalidTokenException;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -64,6 +66,13 @@ public class AuthService {
     }
 
     @Transactional
+    // #161 — Get current user profile by ID (ID injected by api-gateway from JWT)
+    public Optional<UserProfileResponse> getProfile(UUID userId) {
+        return userRepository.findById(userId)
+            .map(u -> new UserProfileResponse(u.getId(), u.getEmail(), u.getUsername(),
+                                              u.isEmailVerified(), u.getCreatedAt()));
+    }
+
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.email())) {
             throw new EmailAlreadyExistsException(request.email());

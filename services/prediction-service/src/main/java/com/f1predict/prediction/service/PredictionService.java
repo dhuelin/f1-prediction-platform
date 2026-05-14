@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -115,6 +116,21 @@ public class PredictionService {
         bet.setBetValue(req.betValue());
         BonusBet saved = bonusBetRepository.save(bet);
         return new BonusBetResponse(saved.getId(), saved.getBetType(), saved.getStake(), saved.getBetValue());
+    }
+
+    // #160 — Retrieve a user's existing prediction (returns empty if none yet)
+    public Optional<PredictionResponse> getPrediction(UUID userId, String raceId, String sessionType) {
+        return predictionRepository.findByUserIdAndRaceIdAndSessionType(userId, raceId, sessionType)
+            .map(this::toResponse);
+    }
+
+    // #160 — Retrieve a user's bonus bets for a race
+    public List<BonusBetResponse> getBets(UUID userId, String raceId, String sessionType) {
+        return predictionRepository.findByUserIdAndRaceIdAndSessionType(userId, raceId, sessionType)
+            .map(p -> bonusBetRepository.findByPredictionId(p.getId()).stream()
+                .map(b -> new BonusBetResponse(b.getId(), b.getBetType(), b.getStake(), b.getBetValue()))
+                .toList())
+            .orElse(List.of());
     }
 
     public List<InternalPredictionResponse> getLockedPredictions(String raceId, String sessionType) {

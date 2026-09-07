@@ -212,6 +212,51 @@ k6 run perf/scripts/live.js         # 100 VUs polling live endpoints every 5s
 | `APPLE_APP_SPECIFIC_PASSWORD` | `mobile-release.yml` — App Store Connect |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_KEY` | `mobile-release.yml` — Google Play |
 
+### Production server sizing
+
+The VPS runs **two stacks side by side**: production (`~/f1predict`, api-gateway on
+8080) and test (`~/f1predict-test`, project name `f1predict-test`, api-gateway on
+8090). That is 16 JVMs plus two sets of Postgres/Redis/RabbitMQ.
+
+**Minimum server: 4 vCPU / 8 GB (Hetzner CX32 or equivalent), plus ~4 GB swap.**
+
+A 2 vCPU / 4 GB box is not enough and will OOM. The service Dockerfiles start the
+JVM with no `-Xmx`, so without a container memory limit each JVM applies its
+default `MaxRAMPercentage` of 25% *of host RAM* — eight services then reserve
+roughly twice the box. Combined with `restart: unless-stopped`, an OOM kill turns
+into a restart loop that takes SSH down with it.
+
+Both deploy overlays therefore set an explicit `mem_limit` on every container and
+pass `JAVA_TOOL_OPTIONS` so each JVM sizes its heap from the cgroup limit:
+
+| | prod | test |
+|---|---|---|
+| Postgres | 640m | 320m |
+| Redis | 128m (`maxmemory 96mb`) | 96m (`maxmemory 64mb`) |
+| RabbitMQ | 448m (watermark 0.5) | 384m (watermark 0.5) |
+| Each of the 8 services | 448m (heap 55%) | 320m (heap 50%) |
+| web-static | 32m | 32m |
+| **Stack total** | **~4.8 GB** | **~3.4 GB** |
+
+Limits are ceilings, not reservations — idle Spring Boot services sit at roughly
+250-300 MB RSS, so steady-state use of both stacks is ~5.5-6 GB. The point of the
+limits is that a runaway service is killed on its own instead of taking the host
+with it.
+
+To give production the whole box, stop the test stack when it is not in use:
+
+```bash
+docker compose --project-name f1predict-test stop
+```
+
+Add swap if the server has none (Hetzner cloud images ship without it):
+
+```bash
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
 ---
 
 ## Design tokens

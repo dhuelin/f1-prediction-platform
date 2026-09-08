@@ -5,6 +5,8 @@ COPY gradle gradle
 COPY build.gradle settings.gradle ./
 COPY common/build.gradle common/
 COPY common/src common/src
+# settings.gradle includes :pitwall-api, so Gradle must be able to configure it
+COPY pitwall-api/build.gradle pitwall-api/
 COPY api-gateway/build.gradle api-gateway/
 COPY api-gateway/src api-gateway/src
 RUN chmod +x gradlew && ./gradlew :api-gateway:bootJar --no-daemon -q

@@ -33,94 +33,19 @@ services:
       timeout: 5s
       retries: 5
 
-  auth-service:
+  pitwall-api:
     build:
       context: .
-      dockerfile: services/auth-service/Dockerfile
+      dockerfile: pitwall-api/Dockerfile
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/auth_db
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pitwall_db
       SPRING_DATASOURCE_USERNAME: f1predict
       SPRING_DATASOURCE_PASSWORD: f1predict
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: f1predict
       SPRING_RABBITMQ_PASSWORD: f1predict
       JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  prediction-service:
-    build:
-      context: .
-      dockerfile: services/prediction-service/Dockerfile
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/prediction_db
-      SPRING_DATASOURCE_USERNAME: f1predict
-      SPRING_DATASOURCE_PASSWORD: f1predict
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: f1predict
-      SPRING_RABBITMQ_PASSWORD: f1predict
-      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
-      SERVICES_SCORING_URL: http://scoring-service:8084
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  league-service:
-    build:
-      context: .
-      dockerfile: services/league-service/Dockerfile
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/league_db
-      SPRING_DATASOURCE_USERNAME: f1predict
-      SPRING_DATASOURCE_PASSWORD: f1predict
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: f1predict
-      SPRING_RABBITMQ_PASSWORD: f1predict
-      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
-      SERVICES_SCORING_URL: http://scoring-service:8084
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  scoring-service:
-    build:
-      context: .
-      dockerfile: services/scoring-service/Dockerfile
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/scoring_db
-      SPRING_DATASOURCE_USERNAME: f1predict
-      SPRING_DATASOURCE_PASSWORD: f1predict
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: f1predict
-      SPRING_RABBITMQ_PASSWORD: f1predict
-      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
-      SERVICES_PREDICTION_URL: http://prediction-service:8082
-      SERVICES_LEAGUE_URL: http://league-service:8083
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  notification-service:
-    build:
-      context: .
-      dockerfile: services/notification-service/Dockerfile
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
-      SPRING_DATASOURCE_USERNAME: f1predict
-      SPRING_DATASOURCE_PASSWORD: f1predict
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: f1predict
-      SPRING_RABBITMQ_PASSWORD: f1predict
-      JWT_SECRET: change-me-in-production-use-256-bit-key-minimum
+      SERVICES_F1DATA_URL: http://f1-data-service:8085
       APNS_TEAM_ID: ""
       APNS_KEY_ID: ""
       APNS_BUNDLE_ID: com.f1predict.app
@@ -132,7 +57,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8086/actuator/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
       interval: 15s
       timeout: 5s
       start_period: 90s
@@ -159,29 +84,6 @@ services:
       redis:
         condition: service_healthy
 
-  analytics-service:
-    build:
-      context: .
-      dockerfile: services/analytics-service/Dockerfile
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/analytics_db
-      SPRING_DATASOURCE_USERNAME: f1predict
-      SPRING_DATASOURCE_PASSWORD: f1predict
-      SPRING_RABBITMQ_HOST: rabbitmq
-      SPRING_RABBITMQ_USERNAME: f1predict
-      SPRING_RABBITMQ_PASSWORD: f1predict
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8087/actuator/health"]
-      interval: 15s
-      timeout: 5s
-      start_period: 90s
-      retries: 5
-
   api-gateway:
     build:
       context: .
@@ -192,17 +94,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
-      prediction-service:
-        condition: service_started
-      league-service:
-        condition: service_started
-      scoring-service:
+      pitwall-api:
         condition: service_started
       f1-data-service:
-        condition: service_started
-      notification-service:
         condition: service_started
 
   web:

@@ -19,33 +19,15 @@ services:
       - "5672:5672"
       - "15672:15672"
 
-  auth-service:
+  # Auth, league, prediction, scoring, notification and analytics all live here now
+  # (formerly ports 8081-8084, 8086, 8087).
+  pitwall-api:
     ports:
       - "8081:8081"
-
-  prediction-service:
-    ports:
-      - "8082:8082"
-
-  league-service:
-    ports:
-      - "8083:8083"
-
-  scoring-service:
-    ports:
-      - "8084:8084"
 
   f1-data-service:
     ports:
       - "8085:8085"
-
-  notification-service:
-    ports:
-      - "8086:8086"
-
-  analytics-service:
-    ports:
-      - "8087:8087"
 
   api-gateway:
     ports:

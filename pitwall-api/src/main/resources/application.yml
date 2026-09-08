@@ -1,0 +1,55 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: pitwall-api
+  datasource:
+    url: jdbc:postgresql://localhost:5432/pitwall_db
+    username: f1predict
+    password: f1predict  # dev default — override via env var in production
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    locations: classpath:db/migration
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: f1predict
+    password: f1predict  # dev default — override via env var in production
+  # NOTE: SecurityAutoConfiguration is deliberately NOT excluded here. The auth
+  # domain needs Spring Security for BCryptPasswordEncoder, and its SecurityConfig
+  # sets anyRequest().permitAll() — the api-gateway remains the authentication
+  # boundary, exactly as before consolidation.
+
+jwt:
+  secret: ${JWT_SECRET:change-me-in-production-use-256-bit-key-minimum}
+  access-token-expiry: 900
+  refresh-token-expiry: 2592000
+
+oauth2:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:not-set}
+    client-secret: ${GOOGLE_CLIENT_SECRET:not-set}
+  apple:
+    client-id: ${APPLE_CLIENT_ID:not-set}
+    team-id: ${APPLE_TEAM_ID:not-set}
+    key-id: ${APPLE_KEY_ID:not-set}
+
+apns:
+  team-id: ${APNS_TEAM_ID:}
+  key-id: ${APNS_KEY_ID:}
+  bundle-id: ${APNS_BUNDLE_ID:com.f1predict.app}
+  auth-key: ${APNS_AUTH_KEY:}
+  production: ${APNS_PRODUCTION:false}
+
+fcm:
+  credentials-json: ${FIREBASE_CREDENTIALS_JSON:}
+
+services:
+  # f1-data-service remains a separate deployable, so this stays an HTTP hop.
+  # The former scoring-url / prediction-url / league-url settings are gone —
+  # those are direct method calls now.
+  f1data-url: ${SERVICES_F1DATA_URL:http://localhost:8085}

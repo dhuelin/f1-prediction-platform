@@ -29,34 +29,15 @@ jobs:
             context: .
             dockerfile: api-gateway/Dockerfile
             port: 8080
-          - name: auth-service
+          # auth, league, prediction, scoring, notification and analytics
+          - name: pitwall-api
             context: .
-            dockerfile: services/auth-service/Dockerfile
+            dockerfile: pitwall-api/Dockerfile
             port: 8081
-          - name: prediction-service
-            context: .
-            dockerfile: services/prediction-service/Dockerfile
-            port: 8082
-          - name: league-service
-            context: .
-            dockerfile: services/league-service/Dockerfile
-            port: 8083
-          - name: scoring-service
-            context: .
-            dockerfile: services/scoring-service/Dockerfile
-            port: 8084
           - name: f1-data-service
             context: .
             dockerfile: services/f1-data-service/Dockerfile
             port: 8085
-          - name: notification-service
-            context: .
-            dockerfile: services/notification-service/Dockerfile
-            port: 8086
-          - name: analytics-service
-            context: .
-            dockerfile: services/analytics-service/Dockerfile
-            port: 8087
     steps:
       - uses: actions/checkout@v4
 
@@ -175,13 +156,9 @@ jobs:
             cd /opt/f1predict
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull \
-              api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service \
-              web-static
+              api-gateway pitwall-api f1-data-service web-static
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans \
-              api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service \
-              web-static
+              api-gateway pitwall-api f1-data-service web-static
             docker image prune -f
           '
 
@@ -198,7 +175,7 @@ jobs:
               sleep 5
             done
             # Create each database if it does not already exist (safe on every deploy)
-            for db in auth_db f1data_db prediction_db league_db scoring_db notification_db analytics_db; do
+            for db in pitwall_db f1data_db; do
               docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tc \
                 "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
                 | grep -q 1 \
@@ -352,13 +329,9 @@ jobs:
             cd ~/f1predict-test
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose --project-name f1predict-test -f docker-compose.yml -f docker-compose.test.yml pull \
-              api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service \
-              web-static
+              api-gateway pitwall-api f1-data-service web-static
             docker compose --project-name f1predict-test -f docker-compose.yml -f docker-compose.test.yml up -d --remove-orphans \
-              api-gateway auth-service prediction-service league-service \
-              scoring-service f1-data-service notification-service analytics-service \
-              web-static
+              api-gateway pitwall-api f1-data-service web-static
             docker image prune -f
           '
 
@@ -373,7 +346,7 @@ jobs:
               echo "Waiting for postgres... ($i/12)"
               sleep 5
             done
-            for db in auth_db f1data_db prediction_db league_db scoring_db notification_db analytics_db; do
+            for db in pitwall_db f1data_db; do
               docker exec f1predict-test-postgres-1 psql -U f1predict -d postgres -tc \
                 "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
                 | grep -q 1 \

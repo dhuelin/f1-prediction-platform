@@ -41,8 +41,8 @@ Infrastructure started:
 | Redis 7 | `6379` | — |
 | RabbitMQ 3 | `5672`, `15672` (management UI) | `f1predict / f1predict` |
 
-`infra/init-db.sql` creates all 8 service databases on first start:
-`auth_db`, `f1data_db`, `prediction_db`, `league_db`, `scoring_db`, `notification_db`, `analytics_db`.
+`infra/init-db.sql` creates both databases on first start: `pitwall_db` (the
+consolidated API) and `f1data_db` (f1-data-service).
 
 ### Stop
 
@@ -57,27 +57,52 @@ docker compose down -v     # also delete postgres data
 
 | Service | Port | Description |
 |---------|------|-------------|
-| api-gateway | 8080 | Spring Cloud Gateway — JWT validation, rate limiting, routes to all services |
-| auth-service | 8081 | Register, login, refresh, email verification, OAuth2 (Google/Apple), password reset |
-| prediction-service | 8082 | Submit/update top-N predictions and bonus bets; enforces qualifying deadline |
-| league-service | 8083 | Create/join leagues with invite codes, scoring config, mid-season catch-up |
-| scoring-service | 8084 | Proximity scoring, bonus bet scoring, league standings, projected live scores |
+| api-gateway | 8080 | Spring Cloud Gateway — JWT validation, rate limiting, routes to the two backends |
+| pitwall-api | 8081 | Auth, leagues, predictions, scoring, notifications and analytics |
 | f1-data-service | 8085 | Race calendar, live positions (OpenF1), race results, WebSocket broadcast |
-| notification-service | 8086 | Push notifications via APNs + FCM; device token management |
-| analytics-service | 8087 | Event ingestion from RabbitMQ; participation stats; query API |
+
+`pitwall-api` is a modular monolith. Auth, league, prediction, scoring,
+notification and analytics were separate Spring Boot services until they were
+consolidated; each keeps its own package under `com.f1predict.*` and its own
+tables, but they share one process, one JVM and one database (`pitwall_db`).
+
+Where a domain needs something from another, it calls a published in-process
+contract rather than making an HTTP request:
+
+| Contract | Provider | Consumer |
+|----------|----------|----------|
+| `prediction.api.PredictionDirectory` | `PredictionService` | scoring |
+| `league.api.LeagueDirectory` | `LeagueService` | scoring |
+| `scoring.api.ScoringDirectory` | `ScoringDirectoryService` | prediction, league |
+
+f1-data-service stays a separate deployable — it owns the scheduled OpenF1
+pollers and the live-race WebSocket broadcast, which have a very different
+runtime profile from request/response API work.
 
 All backend services use:
 - **JWT** via `X-User-Id` header propagated by the gateway (stripped from client input — prevents header injection)
 - **Flyway** for database migrations
-- **RabbitMQ** for event-driven communication between services
+- **RabbitMQ** for events that genuinely cross a process boundary
 
 ### Key event flows
 
+Everything published and consumed inside `pitwall-api` is a Spring
+`ApplicationEvent` — it never touches the broker:
+
 ```
-prediction-service  →  prediction.events / prediction.locked  →  notification-service, analytics-service
-f1-data-service     →  f1.events / session.complete           →  scoring-service, notification-service
-f1-data-service     →  f1.events / race.result.final          →  scoring-service, notification-service, analytics-service
-scoring-service     →  scoring.events / standings.updated     →  analytics-service
+prediction  →  PredictionLockedEvent   →  notification, analytics
+scoring     →  StandingsUpdatedEvent   →  analytics
+```
+
+RabbitMQ now carries only what crosses the process boundary from
+f1-data-service. Each consuming domain keeps its own queue: on a single shared
+queue RabbitMQ would round-robin deliveries and each event would reach only one
+domain.
+
+```
+f1-data-service  →  f1.events / session.complete      →  prediction, notification, analytics
+f1-data-service  →  f1.events / race.result.final     →  scoring, notification, analytics
+f1-data-service  →  f1.events / race.result.amended   →  scoring, notification
 ```
 
 ---
@@ -193,7 +218,7 @@ k6 run perf/scripts/live.js         # 100 VUs polling live endpoints every 5s
 
 | Workflow | Trigger | Jobs |
 |----------|---------|------|
-| `ci.yml` | Push / PR on any branch | Gradle tests, Docker smoke test (all 8 services), mobile TypeScript check |
+| `ci.yml` | Push / PR on any branch | Gradle tests, Docker smoke test (all services), mobile TypeScript check |
 | `deploy.yml` | Push to `main` | Build + push all images to `ghcr.io`, SSH deploy, post-deploy smoke test |
 | `mobile-release.yml` | Push tag `v*.*.*` | EAS Build + EAS Submit for iOS and Android |
 
@@ -216,32 +241,34 @@ k6 run perf/scripts/live.js         # 100 VUs polling live endpoints every 5s
 
 The VPS runs **two stacks side by side**: production (`~/f1predict`, api-gateway on
 8080) and test (`~/f1predict-test`, project name `f1predict-test`, api-gateway on
-8090). That is 16 JVMs plus two sets of Postgres/Redis/RabbitMQ.
+8090).
 
 **Minimum server: 4 vCPU / 8 GB (Hetzner CX32 or equivalent), plus ~4 GB swap.**
 
 A 2 vCPU / 4 GB box is not enough and will OOM. The service Dockerfiles start the
 JVM with no `-Xmx`, so without a container memory limit each JVM applies its
-default `MaxRAMPercentage` of 25% *of host RAM* — eight services then reserve
-roughly twice the box. Combined with `restart: unless-stopped`, an OOM kill turns
-into a restart loop that takes SSH down with it.
+default `MaxRAMPercentage` of 25% *of host RAM*. Combined with
+`restart: unless-stopped`, an OOM kill becomes a restart loop that starves sshd
+of memory and takes SSH deploys down with it.
 
 Both deploy overlays therefore set an explicit `mem_limit` on every container and
 pass `JAVA_TOOL_OPTIONS` so each JVM sizes its heap from the cgroup limit:
 
 | | prod | test |
 |---|---|---|
-| Postgres | 640m | 320m |
+| Postgres | 768m | 384m |
 | Redis | 128m (`maxmemory 96mb`) | 96m (`maxmemory 64mb`) |
 | RabbitMQ | 448m (watermark 0.5) | 384m (watermark 0.5) |
-| Each of the 8 services | 448m (heap 55%) | 320m (heap 50%) |
+| api-gateway | 448m (heap 55%) | 320m (heap 50%) |
+| pitwall-api | 1024m (heap 60%) | 640m (heap 60%) |
+| f1-data-service | 512m (heap 60%) | 384m (heap 55%) |
 | web-static | 32m | 32m |
-| **Stack total** | **~4.8 GB** | **~3.4 GB** |
+| **Stack total** | **~3.4 GB** | **~2.2 GB** |
 
-Limits are ceilings, not reservations — idle Spring Boot services sit at roughly
-250-300 MB RSS, so steady-state use of both stacks is ~5.5-6 GB. The point of the
-limits is that a runaway service is killed on its own instead of taking the host
-with it.
+Consolidating six services into `pitwall-api` took each stack from nine JVMs to
+three. The two stacks together now budget ~5.6 GB of the 8 GB box; before
+consolidation the same two stacks needed ~8.2 GB and only fit because limits are
+ceilings rather than reservations.
 
 To give production the whole box, stop the test stack when it is not in use:
 
@@ -256,6 +283,44 @@ sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
 sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
+
+### Migrating an existing deployment
+
+The consolidation replaces six databases with one. A server that already ran the
+split services has data in `auth_db`, `league_db`, `prediction_db`, `scoring_db`,
+`notification_db` and `analytics_db`; the new app reads `pitwall_db`, which the
+deploy creates empty. **Deploying without migrating leaves that data stranded** —
+the old databases are not dropped, so nothing is lost, but the app starts blank.
+
+No table names collide across the six, so a straight dump-and-load works. Run this
+on the server once, before the first consolidated deploy:
+
+```bash
+cd ~/f1predict
+
+# 1. Back up everything first
+docker exec f1predict-postgres-1 pg_dumpall -U f1predict > ~/f1predict-pre-merge.sql
+
+# 2. Create the target database
+docker exec f1predict-postgres-1 psql -U f1predict -d postgres \
+  -c "CREATE DATABASE pitwall_db;"
+
+# 3. Copy each old database's data in. Skip Flyway's own history table —
+#    the consolidated app has a single renumbered V1..V11 chain of its own.
+for db in auth_db league_db prediction_db scoring_db notification_db analytics_db; do
+  docker exec f1predict-postgres-1 pg_dump -U f1predict --data-only \
+    --exclude-table=flyway_schema_history "$db" \
+  | docker exec -i f1predict-postgres-1 psql -U f1predict -d pitwall_db
+done
+```
+
+Step 3 must run **after** the new app has started once and applied its migrations,
+so the tables exist to load into. In practice: deploy, let `pitwall-api` come up
+and create the schema, stop it, load the data, start it again.
+
+If the deployment has no data worth keeping (only smoke-test accounts), skip all
+of this — the deploy creates `pitwall_db` and Flyway builds the schema from
+scratch.
 
 ---
 

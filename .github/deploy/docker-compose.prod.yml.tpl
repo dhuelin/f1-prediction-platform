@@ -3,22 +3,26 @@
 #
 # ── Memory budget (Hetzner CX32: 4 vCPU / 8 GB) ───────────────────────────────
 # Every container has an explicit mem_limit. Without one the JVM sees the whole
-# host and defaults MaxRAMPercentage to 25% (~2 GB heap per service on an 8 GB
-# box), which is what OOM-killed this server in production.
+# host and defaults MaxRAMPercentage to 25% of it, which is what OOM-killed this
+# server in production.
 #
-#   postgres     640m
-#   redis        128m
-#   rabbitmq     448m
-#   8 services × 448m = 3584m
-#   web-static    32m
-#   ────────────────────
-#   prod total  4832m   (test stack budgets a further ~3.4 GB — see test tpl)
+#   postgres         768m
+#   redis            128m
+#   rabbitmq         448m
+#   api-gateway      448m
+#   pitwall-api     1024m   (auth + league + prediction + scoring + notification + analytics)
+#   f1-data-service  512m
+#   web-static        32m
+#   ────────────────────────
+#   prod total      3360m   (test stack budgets a further ~2.2 GB — see test tpl)
 #
-# mem_limit is a CEILING, not a reservation: idle Spring Boot services sit at
-# ~250-300m RSS, so steady-state use of both stacks is ~5.5-6 GB. The limits are
-# here so a single runaway JVM is killed alone instead of taking the host down,
-# and so each JVM sizes its heap from the cgroup rather than from host RAM.
-# The server should also have ~4 GB of swap to absorb deploy-time overlap.
+# Consolidating six services into pitwall-api took this stack from nine JVMs to
+# three, which is why the per-container limits can now be generous and the two
+# stacks together still fit in 8 GB with room to spare.
+#
+# mem_limit is a CEILING, not a reservation. The limits are here so a single
+# runaway JVM is killed alone instead of taking the host down, and so each JVM
+# sizes its heap from the cgroup rather than from host RAM.
 
 services:
   # RabbitMQ is slow to start on production VPS — give it more time
@@ -38,7 +42,7 @@ services:
   # Postgres healthcheck — generous for cold start
   postgres:
     restart: unless-stopped
-    mem_limit: 640m
+    mem_limit: 768m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U f1predict"]
       interval: 10s
@@ -65,76 +69,28 @@ services:
     environment:
       JWT_SECRET: "${JWT_SECRET}"
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
-    # In production, only wait for Redis (fast); backend services use service_started
-    # to avoid deadlock when Spring Boot takes 2-3 min to pass healthchecks on cold start
+    # Backends use service_started to avoid deadlock when Spring Boot takes
+    # 2-3 min to pass healthchecks on cold start
     depends_on:
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_started
-      prediction-service:
-        condition: service_started
-      league-service:
-        condition: service_started
-      scoring-service:
+      pitwall-api:
         condition: service_started
       f1-data-service:
         condition: service_started
-      notification-service:
-        condition: service_started
 
-  auth-service:
-    image: IMAGE_PREFIX/auth-service:IMAGE_TAG
+  pitwall-api:
+    image: IMAGE_PREFIX/pitwall-api:IMAGE_TAG
     restart: unless-stopped
-    mem_limit: 448m
+    mem_limit: 1024m
     environment:
       JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60 -XX:+UseSerialGC -XX:MaxMetaspaceSize=192m -Xss512k"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET}"
       APPLE_CLIENT_ID: "${APPLE_CLIENT_ID}"
       APPLE_TEAM_ID: "${APPLE_TEAM_ID}"
       APPLE_KEY_ID: "${APPLE_KEY_ID}"
-
-  prediction-service:
-    image: IMAGE_PREFIX/prediction-service:IMAGE_TAG
-    restart: unless-stopped
-    mem_limit: 448m
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
-
-  league-service:
-    image: IMAGE_PREFIX/league-service:IMAGE_TAG
-    restart: unless-stopped
-    mem_limit: 448m
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
-
-  scoring-service:
-    image: IMAGE_PREFIX/scoring-service:IMAGE_TAG
-    restart: unless-stopped
-    mem_limit: 448m
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
-
-  f1-data-service:
-    image: IMAGE_PREFIX/f1-data-service:IMAGE_TAG
-    restart: unless-stopped
-    mem_limit: 448m
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
-
-  notification-service:
-    image: IMAGE_PREFIX/notification-service:IMAGE_TAG
-    restart: unless-stopped
-    mem_limit: 448m
-    environment:
-      JWT_SECRET: "${JWT_SECRET}"
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
       APNS_TEAM_ID: "${APNS_TEAM_ID}"
       APNS_KEY_ID: "${APNS_KEY_ID}"
       APNS_BUNDLE_ID: "${APNS_BUNDLE_ID}"
@@ -142,12 +98,13 @@ services:
       APNS_PRODUCTION: "true"
       FIREBASE_CREDENTIALS_JSON: "${FIREBASE_CREDENTIALS_JSON}"
 
-  analytics-service:
-    image: IMAGE_PREFIX/analytics-service:IMAGE_TAG
+  f1-data-service:
+    image: IMAGE_PREFIX/f1-data-service:IMAGE_TAG
     restart: unless-stopped
-    mem_limit: 448m
+    mem_limit: 512m
     environment:
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=55 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
+      JWT_SECRET: "${JWT_SECRET}"
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -Xss512k"
 
   # Pitwall launch page — served from nginx:alpine mounting the pitwall-launch gh-pages clone
   # The api-gateway routes /** to this container so pitwall.guru/ shows the landing page

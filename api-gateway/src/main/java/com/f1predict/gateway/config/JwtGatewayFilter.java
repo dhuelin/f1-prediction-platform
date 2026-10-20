@@ -24,17 +24,37 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
      * API path prefixes that require a valid JWT.
      * Everything else (auth endpoints, static web assets, etc.) passes through unauthenticated.
      * Add a prefix here when you add a new protected backend service.
+     *
+     * Written WITHOUT trailing slashes and matched by {@link #requiresAuth} as
+     * "equals the prefix, or the prefix followed by /". With trailing slashes and a
+     * bare startsWith, a collection root was left unprotected: "/leagues" does not
+     * start with "/leagues/", so POST /leagues reached the backend with no token and
+     * — because the unprotected branch returns before the header is stripped — with
+     * whatever X-User-Id the client chose to send. That let anyone create a league
+     * owned by any user id. Only POST /leagues was reachable that way, but every
+     * future endpoint at a collection root would have inherited it silently.
      */
     private static final java.util.List<String> PROTECTED_PREFIXES = java.util.List.of(
-        "/auth/me",           // current-user profile — must stay before /auth/ catch-all
-        "/f1/",
-        "/predictions/",
-        "/leagues/",
-        "/scores/",
-        "/notifications/",
-        "/analytics/",
-        "/ws/"
+        "/auth/me",           // current-user profile — the rest of /auth is pre-auth
+        "/f1",
+        "/predictions",
+        "/leagues",
+        "/scores",
+        "/notifications",
+        "/analytics",
+        "/ws"
     );
+
+    /**
+     * True when the path is a protected prefix itself or sits beneath one.
+     *
+     * The segment-boundary check matters: a bare startsWith against "/leagues" would
+     * also match an unrelated "/leaguesomething".
+     */
+    private static boolean requiresAuth(String path) {
+        return PROTECTED_PREFIXES.stream()
+            .anyMatch(prefix -> path.equals(prefix) || path.startsWith(prefix + "/"));
+    }
 
     private final SecretKey key;
 
@@ -48,8 +68,7 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
 
         // Only apply JWT validation to known protected API prefixes.
         // /auth/** and all static web assets pass through without a token.
-        boolean requiresAuth = PROTECTED_PREFIXES.stream().anyMatch(path::startsWith);
-        if (!requiresAuth) {
+        if (!requiresAuth(path)) {
             return chain.filter(exchange);
         }
 

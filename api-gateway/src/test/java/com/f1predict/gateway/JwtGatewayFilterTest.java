@@ -180,4 +180,112 @@ class JwtGatewayFilterTest {
 
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    // ── Collection roots ─────────────────────────────────────────────────────
+    // PROTECTED_PREFIXES used to carry trailing slashes and be matched with a bare
+    // startsWith, so "/leagues" did not match "/leagues/" and the collection root
+    // was unauthenticated. The unprotected branch returns before X-User-Id is
+    // stripped, so a client could also name whichever user it liked.
+
+    @Test
+    void collectionRoot_withoutToken_returns401() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/leagues")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> {
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void collectionRoot_withForgedUserIdAndNoToken_returns401() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/leagues")
+                .header("X-User-Id", "11111111-1111-1111-1111-111111111111")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        String[] capturedUserId = {null};
+        GatewayFilterChain chain = ex -> {
+            capturedUserId[0] = ex.getRequest().getHeaders().getFirst("X-User-Id");
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        // The request must never reach the backend carrying the forged identity.
+        assertThat(capturedUserId[0]).isNull();
+    }
+
+    @Test
+    void collectionRoot_withValidJwt_forwardsVerifiedUserIdOverForgedHeader() {
+        String token = Jwts.builder()
+                .subject("user-123")
+                .signWith(testKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest
+                .post("/leagues")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-User-Id", "11111111-1111-1111-1111-111111111111")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        String[] capturedUserIds = {null};
+        GatewayFilterChain chain = ex -> {
+            capturedUserIds[0] = String.join(",", ex.getRequest().getHeaders().get("X-User-Id"));
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.OK);
+        // Exactly one value, from the JWT — not the client's, and not both.
+        assertThat(capturedUserIds[0]).isEqualTo("user-123");
+    }
+
+    @Test
+    void pathMerelySharingAPrefix_isNotTreatedAsProtected() {
+        // Matching must respect the segment boundary: /leaguesomething is not /leagues
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/leaguesomething")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> {
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void subPathsRemainProtected() {
+        MockServerHttpRequest request = MockServerHttpRequest
+                .get("/leagues/mine")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> {
+            ex.getResponse().setStatusCode(HttpStatus.OK);
+            return Mono.empty();
+        };
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
 }

@@ -53,7 +53,8 @@ class AuthLogoutTest {
             userRepository, passwordEncoder, jwtService,
             refreshTokenRepository, passwordResetTokenRepository,
             emailVerificationTokenRepository,
-            900L, 2592000L);
+            900L, 2592000L,
+            false);
     }
 
     /** Mirrors AuthService's private hashToken (SHA-256, lower-case hex). */

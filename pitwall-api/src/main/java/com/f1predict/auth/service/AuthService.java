@@ -44,6 +44,20 @@ public class AuthService {
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
     private final long accessTokenExpiry;
     private final long refreshTokenExpiry;
+    /**
+     * Whether to write email-verification and password-reset tokens to the log.
+     *
+     * These are single-use credentials: a password-reset token in a log file is an
+     * account-takeover path for anyone who can read logs or a log aggregator. They
+     * were logged because no mailer is wired up, so reading the log was the only way
+     * to complete those flows. That is a development affordance, not a production
+     * one, so it now defaults to off and must be switched on explicitly.
+     *
+     * Consequence worth knowing: with this off and no mailer, email verification and
+     * password reset cannot be completed in production. Delivering them needs an
+     * actual email sender.
+     */
+    private final boolean logDeliveryTokens;
 
     public AuthService(
         UserRepository userRepository,
@@ -53,7 +67,8 @@ public class AuthService {
         PasswordResetTokenRepository passwordResetTokenRepository,
         EmailVerificationTokenRepository emailVerificationTokenRepository,
         @Value("${jwt.access-token-expiry}") long accessTokenExpiry,
-        @Value("${jwt.refresh-token-expiry}") long refreshTokenExpiry
+        @Value("${jwt.refresh-token-expiry}") long refreshTokenExpiry,
+        @Value("${auth.log-delivery-tokens:false}") boolean logDeliveryTokens
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -63,6 +78,7 @@ public class AuthService {
         this.emailVerificationTokenRepository = emailVerificationTokenRepository;
         this.accessTokenExpiry = accessTokenExpiry;
         this.refreshTokenExpiry = refreshTokenExpiry;
+        this.logDeliveryTokens = logDeliveryTokens;
     }
 
     @Transactional
@@ -87,7 +103,11 @@ public class AuthService {
         User saved = userRepository.save(user);
 
         String rawVerification = generateAndPersistEmailVerificationToken(saved);
-        log.info("Email verification token for user {}: {}", saved.getId(), rawVerification);
+        if (logDeliveryTokens) {
+            log.info("Email verification token for user {}: {}", saved.getId(), rawVerification);
+        } else {
+            log.info("Email verification token issued for user {}", saved.getId());
+        }
 
         String rawRefresh = generateRawRefreshToken();
         persistRefreshToken(saved, rawRefresh);
@@ -178,7 +198,11 @@ public class AuthService {
             token.setTokenHash(hashToken(rawToken));
             token.setExpiresAt(Instant.now().plusSeconds(900));
             passwordResetTokenRepository.save(token);
-            log.debug("Password reset token for user id {}: {}", user.getId(), rawToken);
+            if (logDeliveryTokens) {
+                log.debug("Password reset token for user id {}: {}", user.getId(), rawToken);
+            } else {
+                log.debug("Password reset token issued for user id {}", user.getId());
+            }
         });
     }
 
@@ -219,7 +243,11 @@ public class AuthService {
             if (user.isEmailVerified()) return;
             emailVerificationTokenRepository.deleteAllByUserId(user.getId());
             String rawToken = generateAndPersistEmailVerificationToken(user);
-            log.info("Resent email verification token for user {}: {}", user.getId(), rawToken);
+            if (logDeliveryTokens) {
+                log.info("Resent email verification token for user {}: {}", user.getId(), rawToken);
+            } else {
+                log.info("Resent email verification token for user {}", user.getId());
+            }
         });
     }
 

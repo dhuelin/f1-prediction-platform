@@ -24,6 +24,10 @@ services:
   pitwall-api:
     ports:
       - "8081:8081"
+    environment:
+      # Local development has no mailer, so surface verification / reset tokens in
+      # the log to make those flows testable. Never enabled in prod or test.
+      AUTH_LOG_DELIVERY_TOKENS: "true"
 
   f1-data-service:
     ports:

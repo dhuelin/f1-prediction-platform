@@ -24,6 +24,13 @@ spring:
   # sets anyRequest().permitAll() — the api-gateway remains the authentication
   # boundary, exactly as before consolidation.
 
+auth:
+  # Writes email-verification and password-reset tokens to the log so the flows can
+  # be completed locally without a mailer. Off by default: these are single-use
+  # credentials and a log is not a safe place for them. Set AUTH_LOG_DELIVERY_TOKENS
+  # for local development only — never in production.
+  log-delivery-tokens: ${AUTH_LOG_DELIVERY_TOKENS:false}
+
 jwt:
   secret: ${JWT_SECRET:change-me-in-production-use-256-bit-key-minimum}
   access-token-expiry: 900

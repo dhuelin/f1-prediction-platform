@@ -6,7 +6,7 @@ import { Badge, Button, Card, Loader } from '@/components/ui'
 import { useTheme } from '@/hooks/useTheme'
 import { getDrivers, getNextRace } from '@/api/f1data'
 import { getPrediction, submitPrediction, updatePrediction } from '@/api/predictions'
-import { getMyLeagues } from '@/api/leagues'
+import { getConfig, getMyLeagues } from '@/api/leagues'
 import { spacing, typography, colors as rawColors } from '@/theme/tokens'
 import type { Driver, Race, League } from '@/api/types'
 
@@ -29,6 +29,10 @@ export default function PredictScreen() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [existingPredictionId, setExistingPredictionId] = useState<string | null>(null)
+  // How many positions to predict. It comes from the selected league's scoring
+  // config (GET /leagues/{id}/config), not from the league object — League has
+  // never carried a nested config. 10 is the server-side default.
+  const [predictionDepth, setPredictionDepth] = useState(10)
 
   useEffect(() => {
     const init = async () => {
@@ -43,11 +47,11 @@ export default function PredictScreen() {
         const existing = await getPrediction(r.id)
         if (existing) {
           setExistingPredictionId(existing.id)
-          setIsLocked(existing.status === 'locked')
-          const orderedItems = existing.topN.positions
+          setIsLocked(existing.locked)
+          const orderedItems = existing.rankedDriverCodes
             .map(code => items.find(i => i.code === code))
             .filter(Boolean) as DriverItem[]
-          const remaining = items.filter(i => !existing.topN.positions.includes(i.code))
+          const remaining = items.filter(i => !existing.rankedDriverCodes.includes(i.code))
           setRanked([...orderedItems, ...remaining])
         } else {
           setRanked(items)
@@ -60,9 +64,21 @@ export default function PredictScreen() {
     init().catch(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    if (!selectedLeagueId) {
+      setPredictionDepth(10)
+      return
+    }
+    let cancelled = false
+    getConfig(selectedLeagueId)
+      .then(cfg => { if (!cancelled) setPredictionDepth(cfg.predictionDepth) })
+      .catch(() => { if (!cancelled) setPredictionDepth(10) })
+    return () => { cancelled = true }
+  }, [selectedLeagueId])
+
   const handleSubmit = async () => {
     if (!race) return
-    const depth = leagues.find(l => l.id === selectedLeagueId)?.config?.topNSize ?? 10
+    const depth = predictionDepth
     const codes = ranked.slice(0, depth).map(d => d.code)
     setSaving(true)
     try {
@@ -81,7 +97,7 @@ export default function PredictScreen() {
 
   const renderItem = useCallback(({ item, drag, isActive }: RenderItemParams<DriverItem>) => {
     const index = ranked.findIndex(d => d.key === item.key)
-    const depth = leagues.find(l => l.id === selectedLeagueId)?.config?.topNSize ?? 10
+    const depth = predictionDepth
     const inPrediction = index < depth
     return (
       <ScaleDecorator>

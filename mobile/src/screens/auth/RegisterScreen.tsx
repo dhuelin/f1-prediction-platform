@@ -13,7 +13,7 @@ type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Regist
 
 export default function RegisterScreen({ navigation }: Props) {
   const { colors } = useTheme()
-  const { setAuth } = useAuthStore()
+  const { signIn } = useAuthStore()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -27,7 +27,7 @@ export default function RegisterScreen({ navigation }: Props) {
     setLoading(true)
     try {
       const resp = await register(email.trim().toLowerCase(), password, displayName.trim())
-      await setAuth(resp.user, resp.accessToken, resp.refreshToken)
+      await signIn(resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       Alert.alert('Registration Failed', e?.response?.data?.message ?? 'Please try again')
     } finally {

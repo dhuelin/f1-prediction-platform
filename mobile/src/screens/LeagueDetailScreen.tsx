@@ -4,9 +4,9 @@ import { RouteProp, useRoute } from '@react-navigation/native'
 import ScreenWrapper from '@/components/layout/ScreenWrapper'
 import { Avatar, Loader } from '@/components/ui'
 import { useTheme } from '@/hooks/useTheme'
-import { getLeague, getStandings } from '@/api/leagues'
+import { getLeague, getMembers, getStandings } from '@/api/leagues'
 import { spacing, typography } from '@/theme/tokens'
-import type { League, LeagueStandings, Standing } from '@/api/types'
+import type { League, LeagueMember, Standing } from '@/api/types'
 import type { LeagueStackParamList } from '@/navigation/AppNavigator'
 
 type RoutePropType = RouteProp<LeagueStackParamList, 'LeagueDetail'>
@@ -15,18 +15,22 @@ export default function LeagueDetailScreen() {
   const { colors: c } = useTheme()
   const { params } = useRoute<RoutePropType>()
   const [league, setLeague] = useState<League | null>(null)
-  const [standings, setStandings] = useState<LeagueStandings | null>(null)
+  const [standings, setStandings] = useState<Standing[]>([])
+  // Standings carry user ids only; usernames come from the members endpoint.
+  const [members, setMembers] = useState<LeagueMember[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [l, s] = await Promise.all([
+        const [l, s, m] = await Promise.all([
           getLeague(params.leagueId),
           getStandings(params.leagueId),
+          getMembers(params.leagueId).catch(() => [] as LeagueMember[]),
         ])
         setLeague(l)
         setStandings(s)
+        setMembers(m)
       } catch { /* ignore */ }
       finally { setLoading(false) }
     }
@@ -35,17 +39,22 @@ export default function LeagueDetailScreen() {
 
   if (loading) return <Loader />
 
+  const usernameById = new Map(members.map(m => [m.userId, m.username]))
+  const usernameFor = (userId: string) =>
+    usernameById.get(userId) ?? `User ${userId.slice(0, 8)}`
+
   const renderStanding = ({ item, index }: { item: Standing; index: number }) => {
+    const username = usernameFor(item.userId)
     const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : null
     return (
       <View style={[styles.row, { borderBottomColor: c.border }]}>
         <Text style={[styles.rank, { color: index < 3 ? c.primary : c.textMuted }]}>
           {medal ?? item.rank}
         </Text>
-        <Avatar name={item.displayName} size={36} />
+        <Avatar name={username} size={36} />
         <View style={styles.rowInfo}>
-          <Text style={[styles.displayName, { color: c.textPrimary }]}>{item.displayName}</Text>
-          <Text style={[styles.races, { color: c.textMuted }]}>{item.racesScored} races</Text>
+          <Text style={[styles.displayName, { color: c.textPrimary }]}>{username}</Text>
+          <Text style={[styles.races, { color: c.textMuted }]}>Rank {item.rank}</Text>
         </View>
         <Text style={[styles.points, { color: c.primary }]}>{item.totalPoints} pts</Text>
       </View>
@@ -62,7 +71,7 @@ export default function LeagueDetailScreen() {
       </View>
 
       <FlatList
-        data={standings?.standings ?? []}
+        data={standings}
         keyExtractor={s => s.userId}
         renderItem={renderStanding}
         ListHeaderComponent={

@@ -7,7 +7,14 @@ interface AuthState {
   user: User | null
   accessToken: string | null
   isLoading: boolean
-  setAuth: (user: User, accessToken: string, refreshToken: string) => Promise<void>
+  /**
+   * Persist the tokens and load the profile.
+   *
+   * The API's auth responses carry tokens only — there is no nested `user` — so
+   * the profile is fetched with the token we just stored. Callers previously
+   * passed `resp.user`, which was always undefined.
+   */
+  signIn: (accessToken: string, refreshToken: string) => Promise<void>
   clearAuth: () => Promise<void>
   loadFromStorage: () => Promise<void>
 }
@@ -17,9 +24,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   accessToken: null,
   isLoading: true,
 
-  setAuth: async (user, accessToken, refreshToken) => {
+  signIn: async (accessToken, refreshToken) => {
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken)
     await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken)
+    const { getMe } = await import('@/api/auth')
+    const user = await getMe()
     set({ user, accessToken })
     // Register for push after login — non-blocking; imported lazily to avoid circular dep
     import('@/notifications/push').then(m => m.registerForPushNotifications()).catch(console.warn)
@@ -37,7 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       try {
         const { getMe } = await import('@/api/auth')
         const user = await getMe()
-        set({ accessToken: token, user: user as User, isLoading: false })
+        set({ accessToken: token, user, isLoading: false })
       } catch {
         await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY)
         await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)

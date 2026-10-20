@@ -4,16 +4,28 @@
 
 // --- Auth ---
 
+/** GET /auth/me — mirrors UserProfileResponse. */
 export interface User {
   id: string
   email: string
-  displayName: string
+  username: string
+  emailVerified: boolean
+  createdAt: string
 }
 
+/** Alias used by the auth client for clarity at call sites. */
+export type UserProfile = User
+
+/**
+ * POST /auth/login, /auth/register and the OAuth callbacks.
+ *
+ * The API returns tokens only — there is no nested `user`. Callers fetch the
+ * profile with getMe() after storing the token, which is what the token is for.
+ */
 export interface AuthResponse {
   accessToken: string
   refreshToken: string
-  user: User
+  expiresIn: number
 }
 
 export interface RefreshTokenResponse {
@@ -73,107 +85,119 @@ export interface Calendar {
 }
 
 // --- Predictions ---
+// Mirrors PredictionResponse / BonusBetResponse. The previous shapes described a
+// different design — a nested `topN.positions`, a `status` enum, a `leagueId` and
+// an inline `bets` array — none of which the API returns.
 
-export type PredictionStatus = 'draft' | 'submitted' | 'locked'
+export type SessionType = 'RACE' | 'SPRINT'
 
-export interface TopNPrediction {
-  positions: string[]  // driverId[], length = N (typically 10)
-}
+export type BetType = 'FASTEST_LAP' | 'DNF_DSQ_DNS' | 'SC_DEPLOYED' | 'SC_COUNT'
 
-export interface BonusBet {
-  id: string
-  type: string   // e.g. "FASTEST_LAP", "SAFETY_CAR", "DNF"
-  value: string  // e.g. driverId or "YES" / "NO"
-  stake: number  // points wagered
-}
-
+/** GET|POST|PUT /predictions/{raceId} */
 export interface Prediction {
   id: string
   userId: string
   raceId: string
-  leagueId: string
-  topN: TopNPrediction
-  bets: BonusBet[]
-  status: PredictionStatus
-  submittedAt: string | null
-  lockedAt: string | null
+  sessionType: SessionType
+  /** True once the qualifying deadline has passed; the prediction is read-only. */
+  locked: boolean
+  rankedDriverCodes: string[]
 }
 
+/** POST|PUT /predictions/{raceId} */
 export interface SubmitPredictionRequest {
-  leagueId: string
-  topN: TopNPrediction
+  rankedDriverCodes: string[]
+  /** Defaults to RACE server-side. */
+  sessionType?: SessionType
 }
 
-export interface UpdatePredictionRequest {
-  topN?: TopNPrediction
-}
-
-export interface SubmitBetRequest {
-  type: string
-  value: string
+/** GET /predictions/{raceId}/bets, and the POST response. Bets are a separate call. */
+export interface BonusBet {
+  id: string
+  betType: BetType
   stake: number
+  /** Driver code, "true"/"false", or a count — depends on betType. */
+  betValue: string
+}
+
+/** POST /predictions/{raceId}/bets */
+export interface SubmitBetRequest {
+  betType: BetType
+  stake: number
+  betValue: string
 }
 
 // --- Leagues ---
+// These mirror the API. They previously described a different design: League
+// carried a nested `config` and `createdAt` that LeagueResponse does not return,
+// and LeagueConfig shared no field with ScoringConfigResponse.
 
-export type LeagueScoringMode = 'PROXIMITY' | 'EXACT'
-
-export interface LeagueConfig {
-  topNSize: number
-  scoringMode: LeagueScoringMode
-  bonusBetsEnabled: boolean
-  stakingEnabled: boolean
-  maxStakePerRace: number
-  maxBetsPerRace: number
-  catchUpPoints: number | null
-}
+export type LeagueVisibility = 'PUBLIC' | 'PRIVATE'
 
 export interface League {
   id: string
   name: string
+  visibility: LeagueVisibility
+  /** Only returned to the league admin; null otherwise. */
+  inviteCode: string | null
   adminUserId: string
-  inviteCode: string
   memberCount: number
-  config: LeagueConfig
-  createdAt: string
 }
 
 export interface CreateLeagueRequest {
   name: string
-  config?: Partial<LeagueConfig>
+  visibility?: LeagueVisibility
 }
 
 export interface JoinLeagueRequest {
-  inviteCode: string
+  inviteCode: string | null
+}
+
+/** GET /leagues/{id}/members */
+export interface LeagueMember {
+  userId: string
+  username: string
+  isAdmin: boolean
+  joinedAt: string
+}
+
+/** GET|PUT /leagues/{id}/config */
+export interface LeagueScoringConfig {
+  id: string
+  effectiveFromRace: number
+  predictionDepth: number
+  exactPositionPoints: number
+  /** JSON string, e.g. '[{"offset":1,"points":7}]' */
+  offsetTiers: string
+  inRangePoints: number
+  betMultiplier: number
+  /** JSON string, e.g. '{"fastestLap":true,...}' */
+  activeBets: string
+  sprintScoringEnabled: boolean
+  maxStakePerBet: number | null
 }
 
 // --- Standings & Scoring ---
 
+/**
+ * One row of GET /scores/leagues/{id}/standings.
+ *
+ * The endpoint returns a flat array of these — not an object with a `standings`
+ * field — and carries no username: those come from the members endpoint.
+ */
 export interface Standing {
+  userId: string
+  totalPoints: number
   rank: number
-  userId: string
-  displayName: string
-  totalPoints: number
-  pointsBalance: number
-  racesScored: number
 }
 
-export interface LeagueStandings {
-  leagueId: string
-  leagueName: string
-  season: number
-  standings: Standing[]
-  updatedAt: string
+/** GET /scores/races/{raceId}/projected */
+export interface ProjectedStanding {
+  userId: string
+  projectedRacePoints: number
+  currentLeaguePoints: number
 }
 
-export interface UserBalance {
-  userId: string
-  leagueId: string
-  totalPoints: number
-  pointsBalance: number
-  stakingBalance: number
-  racesScored: number
-}
 
 export interface AveragePoints {
   leagueId: string

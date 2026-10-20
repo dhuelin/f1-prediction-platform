@@ -29,7 +29,7 @@ export default function HomeScreen() {
         leagues.slice(0, 3).map(async (league: League) => {
           try {
             const s = await getStandings(league.id)
-            const me = s.standings.find((st: any) => st.userId === user?.id)
+            const me = s.find((st) => st.userId === user?.id)
             return { league, myRank: me?.rank ?? null, totalPoints: me?.totalPoints ?? 0 }
           } catch {
             return { league, myRank: null, totalPoints: 0 }
@@ -65,8 +65,7 @@ export default function HomeScreen() {
     <ScreenWrapper scrollable padded>
       <View style={styles.headerRow}>
         <Text style={[styles.greeting, { color: c.textPrimary }]}>
-          {/* displayName is "First Last" format per API contract */}
-          Hey, {user?.displayName?.split(' ')[0] ?? 'Racer'}!
+          Hey, {user?.username ?? 'Racer'}!
         </Text>
       </View>
 

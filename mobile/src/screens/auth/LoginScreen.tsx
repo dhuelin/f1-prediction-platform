@@ -20,7 +20,7 @@ type Props = { navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'
 
 export default function LoginScreen({ navigation }: Props) {
   const { colors } = useTheme()
-  const { setAuth } = useAuthStore()
+  const { signIn } = useAuthStore()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,7 +38,7 @@ export default function LoginScreen({ navigation }: Props) {
     setLoading(true)
     try {
       const resp = await login(email.trim().toLowerCase(), password)
-      await setAuth(resp.user, resp.accessToken, resp.refreshToken)
+      await signIn(resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       Alert.alert('Login Failed', e?.response?.data?.message ?? 'Please check your credentials')
     } finally {
@@ -56,7 +56,7 @@ export default function LoginScreen({ navigation }: Props) {
         return
       }
       const resp = await loginWithGoogle(idToken)
-      await setAuth(resp.user, resp.accessToken, resp.refreshToken)
+      await signIn(resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       Alert.alert('Google Sign-In Failed', e?.message ?? 'Please try again')
     }
@@ -70,15 +70,14 @@ export default function LoginScreen({ navigation }: Props) {
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       })
-      const fullName = cred.fullName
-        ? `${cred.fullName.givenName ?? ''} ${cred.fullName.familyName ?? ''}`.trim()
-        : undefined
       if (!cred.identityToken) {
         Alert.alert('Apple Sign-In Failed', 'No identity token returned')
         return
       }
-      const resp = await loginWithApple(cred.identityToken, fullName)
-      await setAuth(resp.user, resp.accessToken, resp.refreshToken)
+      // /auth/oauth/apple/callback accepts only { idToken }; the display name
+      // Apple returns has no field on the request.
+      const resp = await loginWithApple(cred.identityToken)
+      await signIn(resp.accessToken, resp.refreshToken)
     } catch (e: any) {
       if (e.code !== 'ERR_CANCELED') {
         Alert.alert('Apple Sign-In Failed', e.message)

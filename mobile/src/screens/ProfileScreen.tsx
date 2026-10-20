@@ -69,8 +69,8 @@ export default function ProfileScreen() {
   return (
     <ScreenWrapper scrollable padded>
       <View style={styles.profileHeader}>
-        <Avatar name={profile?.displayName ?? 'User'} size={72} />
-        <Text style={[styles.displayName, { color: c.textPrimary }]}>{profile?.displayName}</Text>
+        <Avatar name={profile?.username ?? 'User'} size={72} />
+        <Text style={[styles.displayName, { color: c.textPrimary }]}>{profile?.username}</Text>
         <Text style={[styles.email, { color: c.textMuted }]}>{profile?.email}</Text>
       </View>
 

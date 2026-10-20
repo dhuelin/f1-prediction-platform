@@ -12,7 +12,7 @@ import { useLiveRacePolling } from '@/hooks/useLiveRacePolling'
 import { useAuthStore } from '@/store/authStore'
 import { colors, spacing, typography, radius } from '@/theme/tokens'
 import type { LiveRaceState } from '@/api/f1data'
-import type { ProjectedEntry } from '@/api/scoring'
+import type { ProjectedStanding } from '@/api/types'
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'LiveRace'>
 
@@ -75,7 +75,7 @@ function LiveLeaderboard({
   entries,
   currentUserId,
 }: {
-  entries: ProjectedEntry[]
+  entries: ProjectedStanding[]
   currentUserId: string | undefined
 }) {
   const sorted = [...entries].sort(

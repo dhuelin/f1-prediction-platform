@@ -107,6 +107,25 @@ public class LeagueService implements LeagueDirectory {
         return toResponse(league, userId, count);
     }
 
+    /**
+     * Join whichever league owns an invite code.
+     *
+     * Both clients only ever have a code — the user is handed "PUNDITS42", not a
+     * UUID — but the only join endpoint required the league id. The web app
+     * passed the code as the id and the mobile app POSTed to a path that did not
+     * exist, so joining a private league by code worked in neither.
+     */
+    @Transactional
+    public LeagueResponse joinByInviteCode(UUID userId, String inviteCode) {
+        if (inviteCode == null || inviteCode.isBlank()) {
+            throw new IllegalArgumentException("Invite code is required");
+        }
+        String code = inviteCode.trim();
+        League league = leagueRepository.findByInviteCode(code)
+            .orElseThrow(() -> new NoSuchElementException("No league found for that invite code"));
+        return joinLeague(userId, league.getId(), new JoinLeagueRequest(code));
+    }
+
     public List<LeagueResponse> listPublicLeagues() {
         return leagueRepository.findByVisibility("PUBLIC").stream()
             .map(l -> toResponse(l, null, memberRepository.countByLeagueId(l.getId())))

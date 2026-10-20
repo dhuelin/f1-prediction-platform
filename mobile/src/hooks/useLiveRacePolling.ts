@@ -6,7 +6,8 @@ import {
   type LiveDriverPosition,
   type LiveRaceState,
 } from '@/api/f1data'
-import { getProjectedScores, type ProjectedEntry } from '@/api/scoring'
+import { getProjectedScores } from '@/api/scoring'
+import type { ProjectedStanding } from '@/api/types'
 
 const POLL_INTERVAL_MS = 5_000
 
@@ -20,7 +21,7 @@ interface UseLiveRacePollingOptions {
 interface LiveRaceData {
   positions: LiveDriverPosition[]
   raceState: LiveRaceState
-  projected: ProjectedEntry[]
+  projected: ProjectedStanding[]
   lastUpdatedAt: Date | null
   isLoading: boolean
 }

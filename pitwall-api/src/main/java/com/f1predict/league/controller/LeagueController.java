@@ -49,6 +49,16 @@ public class LeagueController {
         return leagueService.getLeague(leagueId, userId);
     }
 
+    // Join by invite code alone — the only identifier a user is given.
+    // Declared separately from /{leagueId}/join, which joins a league you can
+    // already see (and still enforces the code for private ones).
+    @PostMapping("/join")
+    public LeagueResponse joinByCode(
+            @RequestHeader("X-User-Id") UUID userId,
+            @Valid @RequestBody JoinLeagueRequest request) {
+        return leagueService.joinByInviteCode(userId, request.inviteCode());
+    }
+
     // #66 — Join league
     @PostMapping("/{leagueId}/join")
     @ResponseStatus(HttpStatus.CREATED)

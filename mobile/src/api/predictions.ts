@@ -1,7 +1,7 @@
 import apiClient from './client'
-import type { Prediction, SubmitBetRequest, BonusBet } from './types'
+import type { BonusBet, Prediction, SessionType, SubmitBetRequest } from './types'
 
-export async function getPrediction(raceId: string, sessionType = 'RACE'): Promise<Prediction | null> {
+export async function getPrediction(raceId: string, sessionType: SessionType = 'RACE'): Promise<Prediction | null> {
   try {
     const { data } = await apiClient.get<Prediction>(`/predictions/${raceId}`, { params: { sessionType } })
     return data
@@ -11,19 +11,27 @@ export async function getPrediction(raceId: string, sessionType = 'RACE'): Promi
   }
 }
 
-export async function submitPrediction(raceId: string, rankedDriverCodes: string[], sessionType = 'RACE'): Promise<Prediction> {
+export async function submitPrediction(raceId: string, rankedDriverCodes: string[], sessionType: SessionType = 'RACE'): Promise<Prediction> {
   const { data } = await apiClient.post<Prediction>(`/predictions/${raceId}`, { rankedDriverCodes, sessionType })
   return data
 }
 
-export async function updatePrediction(raceId: string, rankedDriverCodes: string[], sessionType = 'RACE'): Promise<Prediction> {
+export async function updatePrediction(raceId: string, rankedDriverCodes: string[], sessionType: SessionType = 'RACE'): Promise<Prediction> {
   const { data } = await apiClient.put<Prediction>(`/predictions/${raceId}`, { rankedDriverCodes, sessionType })
   return data
 }
 
-export async function submitBet(raceId: string, bet: SubmitBetRequest, leagueId: string, sessionType = 'RACE'): Promise<BonusBet> {
+export async function submitBet(raceId: string, bet: SubmitBetRequest, leagueId: string, sessionType: SessionType = 'RACE'): Promise<BonusBet> {
   const { data } = await apiClient.post<BonusBet>(`/predictions/${raceId}/bets`, bet, {
     params: { sessionType, leagueId },
+  })
+  return data
+}
+
+/** Existing bonus bets for a race — GET /predictions/{raceId} does not include them. */
+export async function getBets(raceId: string, sessionType: SessionType = 'RACE'): Promise<BonusBet[]> {
+  const { data } = await apiClient.get<BonusBet[]>(`/predictions/${raceId}/bets`, {
+    params: { sessionType },
   })
   return data
 }

@@ -68,6 +68,14 @@ public class LeagueController {
         return leagueService.updateConfig(leagueId, userId, request, nextRace);
     }
 
+    // #163 — List league members with usernames
+    @GetMapping("/{leagueId}/members")
+    public List<LeagueMemberResponse> getMembers(
+            @PathVariable UUID leagueId,
+            @RequestHeader("X-User-Id") UUID userId) {
+        return leagueService.getMembers(leagueId, userId);
+    }
+
     // #69 — Remove member (admin only)
     @DeleteMapping("/{leagueId}/members/{targetUserId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)

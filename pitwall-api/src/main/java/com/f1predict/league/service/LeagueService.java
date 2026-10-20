@@ -1,5 +1,7 @@
 package com.f1predict.league.service;
 
+import com.f1predict.auth.api.AuthDirectory;
+import com.f1predict.auth.api.UserSummary;
 import com.f1predict.league.api.LeagueDirectory;
 import com.f1predict.league.api.LeagueMemberSnapshot;
 import com.f1predict.league.api.LeagueScoringConfig;
@@ -15,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,15 +31,18 @@ public class LeagueService implements LeagueDirectory {
     private final LeagueMemberRepository memberRepository;
     private final ScoringConfigRepository configRepository;
     private final ScoringDirectory scoring;
+    private final AuthDirectory auth;
 
     public LeagueService(LeagueRepository leagueRepository,
                          LeagueMemberRepository memberRepository,
                          ScoringConfigRepository configRepository,
-                         ScoringDirectory scoring) {
+                         ScoringDirectory scoring,
+                         AuthDirectory auth) {
         this.leagueRepository = leagueRepository;
         this.memberRepository = memberRepository;
         this.configRepository = configRepository;
         this.scoring = scoring;
+        this.auth = auth;
     }
 
     @Transactional
@@ -213,6 +221,43 @@ public class LeagueService implements LeagueDirectory {
 
     private String generateInviteCode() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+    }
+
+    /**
+     * Members of a league, with usernames resolved from the auth domain (#163).
+     *
+     * A PRIVATE league's roster is visible only to its members; a PUBLIC league's
+     * is visible to anyone signed in, matching how listPublicLeagues already
+     * exposes public leagues.
+     */
+    public List<LeagueMemberResponse> getMembers(UUID leagueId, UUID requesterId) {
+        League league = leagueRepository.findById(leagueId)
+            .orElseThrow(() -> new NoSuchElementException("League not found"));
+
+        List<LeagueMember> members = memberRepository.findByLeagueId(leagueId);
+
+        if (!"PUBLIC".equals(league.getVisibility())) {
+            boolean requesterIsMember = members.stream()
+                .anyMatch(m -> m.getUserId().equals(requesterId));
+            if (!requesterIsMember) {
+                throw new SecurityException("Only members can view a private league's roster");
+            }
+        }
+
+        Map<UUID, String> usernames = auth
+            .getUsers(members.stream().map(LeagueMember::getUserId).toList())
+            .stream()
+            .collect(Collectors.toMap(UserSummary::userId, UserSummary::username));
+
+        return members.stream()
+            .map(m -> new LeagueMemberResponse(
+                m.getUserId(),
+                // A member whose user row has gone is still a member of the league;
+                // render them rather than dropping them from the roster silently.
+                usernames.getOrDefault(m.getUserId(), "(unknown)"),
+                m.getUserId().equals(league.getAdminUserId()),
+                m.getJoinedAt()))
+            .toList();
     }
 
     // ── LeagueDirectory: in-app contract for the scoring domain ──────────────

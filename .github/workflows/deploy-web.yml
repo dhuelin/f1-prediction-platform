@@ -35,7 +35,11 @@ jobs:
       - name: Build (production)
         working-directory: web
         env:
-          VITE_API_BASE_URL: https://pitwall.guru
+          # The API is served from api.pitwall.guru (DNS-only record straight to the
+          # VPS). pitwall.guru itself is proxied through Cloudflare and serves the
+          # launch page, so pointing the app there sent every API call to the
+          # marketing site.
+          VITE_API_BASE_URL: https://api.pitwall.guru
         run: npm run build
 
       - name: Deploy to Cloudflare Pages

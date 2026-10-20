@@ -102,7 +102,7 @@ jobs:
 
       - name: Copy compose files to server
         run: |
-          scp docker-compose.yml docker-compose.prod.yml \
+          scp docker-compose.yml docker-compose.prod.yml infra/backup-db.sh \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
 
       - name: Bootstrap server .env (generate secrets if missing)
@@ -182,6 +182,33 @@ jobs:
                 || docker exec f1predict-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
               echo "  ${db}: ready"
             done
+          '
+
+      - name: Install daily database backup cron
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -e
+            chmod +x /opt/f1predict/backup-db.sh
+            mkdir -p /opt/f1predict/backups
+            ENTRY="15 3 * * * STACK_DIR=/opt/f1predict /opt/f1predict/backup-db.sh >> /opt/f1predict/backups/cron.log 2>&1"
+            # Idempotent: replace any previous entry rather than stacking duplicates
+            # on every deploy, and keep every unrelated job.
+            #
+            # Read the existing crontab into a variable BEFORE writing. Piping
+            # `crontab -l` straight into `crontab -` has both ends of the pipeline
+            # touching the same crontab at once, which can truncate it before it
+            # has been read — silently dropping every other cron job on the box.
+            CURRENT=$(crontab -l 2>/dev/null | grep -vF "backup-db.sh" || true)
+            if [ -n "$CURRENT" ]; then
+              printf "%s\n%s\n" "$CURRENT" "$ENTRY" | crontab -
+            else
+              printf "%s\n" "$ENTRY" | crontab -
+            fi
+            echo "  backup cron: installed for 03:15 UTC daily"
+            crontab -l | grep -F "backup-db.sh"
           '
 
       - name: Post-deploy smoke test (functional)

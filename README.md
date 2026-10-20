@@ -322,6 +322,40 @@ If the deployment has no data worth keeping (only smoke-test accounts), skip all
 of this — the deploy creates `pitwall_db` and Flyway builds the schema from
 scratch.
 
+### Database backups
+
+`deploy.yml` installs `infra/backup-db.sh` on the production server and registers
+a cron entry for **03:15 UTC daily**. Each run dumps `pitwall_db` and `f1data_db`,
+gzips them into `/opt/f1predict/backups/`, and prunes anything older than 7 days.
+
+```bash
+~/f1predict/backup-db.sh          # run on demand
+tail /opt/f1predict/backups/cron.log
+ls -lh /opt/f1predict/backups/
+```
+
+A local dump sits on the same disk as the database it protects, so it covers a bad
+migration or a wrong `DELETE` but not disk loss. For off-box copies, set these in
+`/opt/f1predict/.env` and the script uploads each dump to Cloudflare R2 (it shells
+out to the `amazon/aws-cli` container, so nothing needs installing on the VPS):
+
+| Variable | Value |
+|----------|-------|
+| `R2_BUCKET` | bucket name |
+| `R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
+| `R2_ACCESS_KEY_ID` | R2 API token key id |
+| `R2_SECRET_ACCESS_KEY` | R2 API token secret |
+
+Set a lifecycle rule on the bucket to expire old objects; the script only prunes
+local copies.
+
+Restore a dump into a running stack:
+
+```bash
+gunzip -c /opt/f1predict/backups/pitwall_db-<stamp>.sql.gz \
+  | docker exec -i f1predict-postgres-1 psql -U f1predict -d pitwall_db
+```
+
 ---
 
 ## Design tokens

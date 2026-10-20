@@ -52,11 +52,11 @@ const PLACEHOLDER_RACES: Race[] = [
 ]
 
 const PLACEHOLDER_RESULTS: RaceResult[] = [
-  { raceId: 'race-1', position: 1, driverId: 'd-ver', driverName: 'Max Verstappen', driverCode: 'VER', team: 'Red Bull Racing', lapsCompleted: 57, timeOrStatus: '1:31:44.742', fastestLap: false },
-  { raceId: 'race-1', position: 2, driverId: 'd-nor', driverName: 'Lando Norris', driverCode: 'NOR', team: 'McLaren', lapsCompleted: 57, timeOrStatus: '+2.513s', fastestLap: true },
-  { raceId: 'race-1', position: 3, driverId: 'd-lec', driverName: 'Charles Leclerc', driverCode: 'LEC', team: 'Ferrari', lapsCompleted: 57, timeOrStatus: '+4.101s', fastestLap: false },
-  { raceId: 'race-1', position: 4, driverId: 'd-ham', driverName: 'Lewis Hamilton', driverCode: 'HAM', team: 'Ferrari', lapsCompleted: 57, timeOrStatus: '+8.241s', fastestLap: false },
-  { raceId: 'race-1', position: 5, driverId: 'd-pia', driverName: 'Oscar Piastri', driverCode: 'PIA', team: 'McLaren', lapsCompleted: 57, timeOrStatus: '+12.553s', fastestLap: false },
+  { raceId: 'race-1', position: 1, driverId: 'd-ver', driverCode: 'VER', timeOrStatus: '1:31:44.742', fastestLap: false },
+  { raceId: 'race-1', position: 2, driverId: 'd-nor', driverCode: 'NOR', timeOrStatus: '+2.513s', fastestLap: true },
+  { raceId: 'race-1', position: 3, driverId: 'd-lec', driverCode: 'LEC', timeOrStatus: '+4.101s', fastestLap: false },
+  { raceId: 'race-1', position: 4, driverId: 'd-ham', driverCode: 'HAM', timeOrStatus: '+8.241s', fastestLap: false },
+  { raceId: 'race-1', position: 5, driverId: 'd-pia', driverCode: 'PIA', timeOrStatus: '+12.553s', fastestLap: false },
 ]
 
 // ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ function RaceAccordion({ detail, open, onToggle }: RaceAccordionProps) {
               <p className="text-sm text-text-secondary italic">No prediction submitted.</p>
             ) : (
               <ol className="space-y-1.5">
-                {prediction.topN.positions.map((driverId, idx) => (
+                {prediction.rankedDriverCodes.map((driverId, idx) => (
                   <li key={driverId} className="flex items-center gap-2 text-sm">
                     <span className="w-5 text-right text-xs font-bold text-text-muted tabular-nums">
                       {idx + 1}.
@@ -191,7 +191,7 @@ function RaceAccordion({ detail, open, onToggle }: RaceAccordionProps) {
                     <span className="font-mono text-xs bg-surface-raised text-text-secondary px-1.5 py-0.5 rounded">
                       {r.driverCode}
                     </span>
-                    <span className="flex-1 text-text-primary truncate">{r.driverName}</span>
+                    <span className="flex-1 text-text-secondary truncate">{r.timeOrStatus}</span>
                     {r.fastestLap && (
                       <span className="text-xs text-purple-400" title="Fastest Lap">FL</span>
                     )}

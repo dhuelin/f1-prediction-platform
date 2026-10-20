@@ -14,7 +14,7 @@ import { Loader } from '@/components/ui/Loader'
 import * as f1Api from '@/api/f1data'
 import * as predictionsApi from '@/api/predictions'
 import * as leaguesApi from '@/api/leagues'
-import type { Driver, Prediction, Race } from '@/api/types'
+import type { BetType, Driver, Prediction, Race } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -44,8 +44,6 @@ const PLACEHOLDER_DRIVERS: Driver[] = [
 ]
 
 const TOP_N = 10
-
-type BetType = 'FASTEST_LAP' | 'DNF_DSQ_DNS' | 'SC_DEPLOYED' | 'SC_COUNT'
 
 const BET_LABELS: Record<BetType, string> = {
   FASTEST_LAP: 'Fastest Lap',
@@ -174,7 +172,7 @@ export function PredictPage() {
 
         // Try to fetch league for submission
         try {
-          const leagueList = await leaguesApi.getLeagues()
+          const leagueList = await leaguesApi.getMyLeagues()
           if (!cancelled && leagueList.length > 0) {
             setLeagueId(leagueList[0].id)
           }
@@ -182,32 +180,34 @@ export function PredictPage() {
           // no league — will fail gracefully on submit
         }
 
-        // Try to load existing prediction
+        // Try to load existing prediction. Bonus bets are a separate resource —
+        // GET /predictions/{raceId} returns the ranking only.
         try {
           const p = await predictionsApi.getPrediction(raceId)
           if (cancelled) return
           setExistingPrediction(p)
-          if (p.status === 'locked') {
+          if (p && p.locked) {
             setIsLocked(true)
-          } else {
+          } else if (p) {
             setIsUpdateMode(true)
-            // Pre-populate ranked
-            const positions = p.topN.positions
+            // Driver ids from /f1/drivers are the 3-letter codes the prediction
+            // endpoints expect, so these need no translation.
+            const positions = p.rankedDriverCodes
             const newRanked: Array<string | null> = Array(TOP_N).fill(null)
-            positions.forEach((id, i) => {
-              if (i < TOP_N) newRanked[i] = id
+            positions.forEach((code, i) => {
+              if (i < TOP_N) newRanked[i] = code
             })
             setRanked(newRanked)
             const usedSet = new Set(positions)
             setPool(driverList.map((d) => d.id).filter((id) => !usedSet.has(id)))
 
-            // Pre-populate bets
-            if (p.bets.length > 0) {
+            const existingBets = await predictionsApi.getBets(raceId).catch(() => [])
+            if (!cancelled && existingBets.length > 0) {
               setBets((prev) =>
                 prev.map((b) => {
-                  const existing = p.bets.find((pb) => pb.type === b.type)
+                  const existing = existingBets.find((pb) => pb.betType === b.type)
                   if (existing) {
-                    return { ...b, enabled: true, value: existing.value, stake: String(existing.stake) }
+                    return { ...b, enabled: true, value: existing.betValue, stake: String(existing.stake) }
                   }
                   return b
                 }),
@@ -215,7 +215,7 @@ export function PredictPage() {
             }
           }
         } catch {
-          // 404 = no prediction yet — stay in submit mode
+          // Unexpected failure — stay in submit mode
         }
       } catch {
         if (!cancelled) {
@@ -308,24 +308,27 @@ export function PredictPage() {
 
     setSubmitting(true)
     try {
+      // The prediction body is the ranking alone; the league is not part of it.
       if (isUpdateMode && existingPrediction) {
-        await predictionsApi.updatePrediction(raceId, { topN: { positions } })
+        await predictionsApi.updatePrediction(raceId, { rankedDriverCodes: positions })
       } else {
-        await predictionsApi.submitPrediction(raceId, {
-          leagueId,
-          topN: { positions },
-        })
+        await predictionsApi.submitPrediction(raceId, { rankedDriverCodes: positions })
       }
 
-      // Submit enabled bets
+      // Bets are a separate resource, and the league goes on the query string
+      // because stake validation is per league.
       const enabledBets = bets.filter((b) => b.enabled && b.value.trim())
       await Promise.allSettled(
         enabledBets.map((b) =>
-          predictionsApi.submitBet(raceId, {
-            type: b.type,
-            value: b.value.trim(),
-            stake: Number(b.stake) || 10,
-          }),
+          predictionsApi.submitBet(
+            raceId,
+            {
+              betType: b.type,
+              betValue: b.value.trim(),
+              stake: Number(b.stake) || 10,
+            },
+            leagueId ?? undefined,
+          ),
         ),
       )
 
@@ -397,7 +400,7 @@ export function PredictPage() {
         // Read-only view
         <Card header={<span className="font-semibold text-text-primary">Locked Prediction</span>}>
           <div className="space-y-2">
-            {existingPrediction?.topN.positions.map((driverId, i) => {
+            {existingPrediction?.rankedDriverCodes.map((driverId, i) => {
               const driver = driverMap.get(driverId)
               return (
                 <div

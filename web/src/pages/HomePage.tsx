@@ -183,7 +183,8 @@ export function HomePage() {
         const p = await predictionsApi.getPrediction(nextRace.id)
         if (!cancelled) {
           setPrediction(p)
-          setPredictionStatus(p.status === 'locked' ? 'locked' : 'submitted')
+          // No prediction yet reads as not-submitted rather than an error.
+          setPredictionStatus(p === null ? 'not-submitted' : p.locked ? 'locked' : 'submitted')
         }
       } catch (err: unknown) {
         if (!cancelled) {
@@ -332,9 +333,9 @@ export function HomePage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-medium text-green-400">Submitted ✓</p>
-                  {prediction?.submittedAt && (
+                  {prediction && prediction.rankedDriverCodes.length > 0 && (
                     <p className="text-xs text-text-muted mt-0.5">
-                      {new Date(prediction.submittedAt).toLocaleString()}
+                      Top {prediction.rankedDriverCodes.length} ranked
                     </p>
                   )}
                 </div>

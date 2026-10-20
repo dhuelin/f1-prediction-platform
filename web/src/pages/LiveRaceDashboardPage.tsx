@@ -208,7 +208,7 @@ export function LiveRaceDashboardPage() {
   if (loading) return <div className="flex justify-center py-20"><Loader /></div>
   if (error) return <p className="text-center py-10 text-red-400">{error}</p>
 
-  const rankedDrivers: string[] = prediction?.topN?.positions ?? []
+  const rankedDrivers: string[] = prediction?.rankedDriverCodes ?? []
   const myProjected = projected.find((e) => e.userId === user?.id)
 
   return (

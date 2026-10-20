@@ -70,11 +70,10 @@ export interface Race {
 export interface RaceResult {
   raceId: string
   position: number
+  /** Same value as driverCode — the API keys drivers by their 3-letter code. */
   driverId: string
-  driverName: string
   driverCode: string
-  team: string
-  lapsCompleted: number
+  /** Finish time, gap, or a status like "DNF". */
   timeOrStatus: string
   fastestLap: boolean
 }

@@ -68,7 +68,8 @@ async function fetchStats(userId: string): Promise<Stats> {
       finishedRaces.map((r) => predictionsApi.getPrediction(r.id)),
     )
     for (const r of predResults) {
-      if (r.status === 'fulfilled' && r.value.status !== 'draft') predictionsCount++
+      // A fulfilled call returning null means the race had no prediction.
+      if (r.status === 'fulfilled' && r.value !== null) predictionsCount++
     }
   } catch {
     // ignore — best-effort

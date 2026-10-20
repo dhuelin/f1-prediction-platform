@@ -60,11 +60,10 @@ export interface Race {
 export interface RaceResult {
   raceId: string
   position: number
+  /** Same value as driverCode — the API keys drivers by their 3-letter code. */
   driverId: string
-  driverName: string
   driverCode: string
-  team: string
-  lapsCompleted: number
+  /** Finish time, gap, or a status like "DNF". */
   timeOrStatus: string
   fastestLap: boolean
 }
@@ -75,45 +74,46 @@ export interface Calendar {
 }
 
 // --- Predictions ---
+// Mirrors PredictionResponse / BonusBetResponse. The previous shapes described a
+// different design — a nested `topN.positions`, a `status` enum, a `leagueId` and
+// an inline `bets` array — none of which the API returns.
 
-export type PredictionStatus = 'draft' | 'submitted' | 'locked'
+export type SessionType = 'RACE' | 'SPRINT'
 
-export interface TopNPrediction {
-  positions: string[]  // driverId[], length = N (typically 10)
-}
+export type BetType = 'FASTEST_LAP' | 'DNF_DSQ_DNS' | 'SC_DEPLOYED' | 'SC_COUNT'
 
-export interface BonusBet {
-  id: string
-  type: string   // e.g. "FASTEST_LAP", "SAFETY_CAR", "DNF"
-  value: string  // e.g. driverId or "YES" / "NO"
-  stake: number  // points wagered
-}
-
+/** GET|POST|PUT /predictions/{raceId} */
 export interface Prediction {
   id: string
   userId: string
   raceId: string
-  leagueId: string
-  topN: TopNPrediction
-  bets: BonusBet[]
-  status: PredictionStatus
-  submittedAt: string | null
-  lockedAt: string | null
+  sessionType: SessionType
+  /** True once the qualifying deadline has passed; the prediction is read-only. */
+  locked: boolean
+  rankedDriverCodes: string[]
 }
 
+/** POST|PUT /predictions/{raceId} */
 export interface SubmitPredictionRequest {
-  leagueId: string
-  topN: TopNPrediction
+  rankedDriverCodes: string[]
+  /** Defaults to RACE server-side. */
+  sessionType?: SessionType
 }
 
-export interface UpdatePredictionRequest {
-  topN?: TopNPrediction
-}
-
-export interface SubmitBetRequest {
-  type: string
-  value: string
+/** GET /predictions/{raceId}/bets, and the POST response. Bets are a separate call. */
+export interface BonusBet {
+  id: string
+  betType: BetType
   stake: number
+  /** Driver code, "true"/"false", or a count — depends on betType. */
+  betValue: string
+}
+
+/** POST /predictions/{raceId}/bets */
+export interface SubmitBetRequest {
+  betType: BetType
+  stake: number
+  betValue: string
 }
 
 // --- Leagues ---

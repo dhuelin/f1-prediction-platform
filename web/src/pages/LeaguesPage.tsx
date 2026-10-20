@@ -8,7 +8,7 @@ import { Loader } from '@/components/ui/Loader'
 import { useAuthStore } from '@/store/authStore'
 import * as leaguesApi from '@/api/leagues'
 import * as scoringApi from '@/api/scoring'
-import type { League, UserBalance } from '@/api/types'
+import type { League } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -21,8 +21,7 @@ const PLACEHOLDER_LEAGUES: League[] = [
     adminUserId: 'user-1',
     inviteCode: 'PUNDITS42',
     memberCount: 12,
-    config: { topNSize: 10, scoringMode: 'PROXIMITY', bonusBetsEnabled: true, stakingEnabled: true, maxStakePerRace: 100, maxBetsPerRace: 4, catchUpPoints: null },
-    createdAt: '2026-01-01T00:00:00Z',
+    visibility: 'PRIVATE',
   },
   {
     id: 'league-2',
@@ -30,8 +29,7 @@ const PLACEHOLDER_LEAGUES: League[] = [
     adminUserId: 'user-2',
     inviteCode: 'FANATICS',
     memberCount: 48,
-    config: { topNSize: 10, scoringMode: 'PROXIMITY', bonusBetsEnabled: false, stakingEnabled: false, maxStakePerRace: 0, maxBetsPerRace: 0, catchUpPoints: null },
-    createdAt: '2026-01-15T00:00:00Z',
+    visibility: 'PUBLIC',
   },
 ]
 
@@ -73,7 +71,8 @@ function Tabs({
 // ---------------------------------------------------------------------------
 interface LeagueCardProps {
   league: League
-  balance: UserBalance | null
+  /** Points total in this league — the API returns a bare number. */
+  balance: number | null
   isMyLeague: boolean
   onJoin?: (league: League) => void
   joining?: boolean
@@ -93,13 +92,13 @@ function LeagueCard({ league, balance, isMyLeague, onJoin, joining }: LeagueCard
         </div>
         <p className="mt-0.5 text-sm text-text-muted">
           {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
-          {league.config.bonusBetsEnabled && ' · Bonus bets'}
+          {league.visibility === 'PRIVATE' && ' · Private'}
         </p>
       </div>
 
       <div className="flex items-center gap-3 ml-4 flex-shrink-0">
         {isMyLeague && balance !== null && (
-          <span className="text-sm font-semibold text-f1-red">{balance.totalPoints} pts</span>
+          <span className="text-sm font-semibold text-f1-red">{balance} pts</span>
         )}
         {!isMyLeague && onJoin && (
           <Button
@@ -130,7 +129,7 @@ export function LeaguesPage() {
   const [activeTab, setActiveTab] = useState(0)
   const [myLeagues, setMyLeagues] = useState<League[]>([])
   const [publicLeagues, setPublicLeagues] = useState<League[]>([])
-  const [balances, setBalances] = useState<Map<string, UserBalance>>(new Map())
+  const [balances, setBalances] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error] = useState<string | null>(null)
 
@@ -153,15 +152,26 @@ export function LeaguesPage() {
 
   async function fetchLeagues() {
     try {
-      const list = await leaguesApi.getLeagues()
-      setMyLeagues(list.length > 0 ? list : PLACEHOLDER_LEAGUES.slice(0, 1))
-      setPublicLeagues(list.length > 0 ? list : PLACEHOLDER_LEAGUES)
+      // "My Leagues" and "Browse" are different lists: /leagues returns public
+      // leagues only, so filling both from it hid the user's own private leagues
+      // and showed leagues they had not joined under "mine".
+      const [mineResult, publicResult] = await Promise.allSettled([
+        leaguesApi.getMyLeagues(),
+        leaguesApi.getLeagues(),
+      ])
+      const mine = mineResult.status === 'fulfilled' ? mineResult.value : []
+      const browse = publicResult.status === 'fulfilled' ? publicResult.value : []
+
+      setMyLeagues(mine.length > 0 ? mine : PLACEHOLDER_LEAGUES.slice(0, 1))
+      setPublicLeagues(browse.length > 0 ? browse : PLACEHOLDER_LEAGUES)
 
       if (user) {
+        // Balances only make sense for leagues the user is actually in.
+        const list = mine
         const entries = await Promise.allSettled(
           list.map((l) => scoringApi.getBalance(user.id, l.id)),
         )
-        const map = new Map<string, UserBalance>()
+        const map = new Map<string, number>()
         entries.forEach((r, i) => {
           if (r.status === 'fulfilled') map.set(list[i].id, r.value)
         })
@@ -224,7 +234,7 @@ export function LeaguesPage() {
     try {
       await leaguesApi.createLeague({
         name: createName.trim(),
-        config: createPublic ? undefined : { topNSize: 10, scoringMode: 'PROXIMITY', bonusBetsEnabled: true, stakingEnabled: true, maxStakePerRace: 100, maxBetsPerRace: 4, catchUpPoints: null },
+        visibility: createPublic ? 'PUBLIC' : 'PRIVATE',
       })
       setCreateModalOpen(false)
       setCreateName('')

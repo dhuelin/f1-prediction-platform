@@ -119,6 +119,36 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
 
+  web-typecheck:
+    name: Web TypeScript Check
+    runs-on: ubuntu-latest
+    container: node:20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: web/node_modules
+          key: npm-web-${{ hashFiles('web/package-lock.json') }}
+          restore-keys: npm-web-
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      # `tsc -b`, not `tsc --noEmit`: web/tsconfig.json is a project-references
+      # stub with "files": [], so a plain `tsc --noEmit` there typechecks nothing
+      # and passes on a codebase full of errors. Build mode follows the
+      # references into tsconfig.app.json where the sources actually are.
+      - name: TypeScript check
+        working-directory: web
+        run: npx tsc -b --noEmit
+
+      - name: Production build
+        working-directory: web
+        run: npm run build
+
   mobile-typecheck:
     name: Mobile TypeScript Check
     runs-on: ubuntu-latest

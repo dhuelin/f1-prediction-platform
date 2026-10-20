@@ -47,7 +47,7 @@ interface Stats {
 }
 
 async function fetchStats(userId: string): Promise<Stats> {
-  const leagues = await leaguesApi.getLeagues()
+  const leagues = await leaguesApi.getMyLeagues()
   let totalPoints = 0
 
   // Sum balance across all leagues
@@ -55,7 +55,8 @@ async function fetchStats(userId: string): Promise<Stats> {
     leagues.map((l) => scoringApi.getBalance(userId, l.id)),
   )
   for (const r of balanceResults) {
-    if (r.status === 'fulfilled') totalPoints += r.value.totalPoints
+    // getBalance returns the points total directly, not an object
+    if (r.status === 'fulfilled') totalPoints += r.value
   }
 
   // Count predictions submitted across finished races

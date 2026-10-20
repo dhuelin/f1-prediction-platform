@@ -6,7 +6,7 @@ import * as f1dataApi from '@/api/f1data'
 import * as predictionsApi from '@/api/predictions'
 import * as scoringApi from '@/api/scoring'
 import * as leaguesApi from '@/api/leagues'
-import type { Race, RaceResult, Prediction, UserBalance } from '@/api/types'
+import type { Race, RaceResult, Prediction } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -77,7 +77,8 @@ interface RaceDetail {
   race: Race
   prediction: Prediction | null
   results: RaceResult[]
-  balance: UserBalance | null
+  /** Points balance in the user's league — the API returns a bare number. */
+  balance: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +131,7 @@ function RaceAccordion({ detail, open, onToggle }: RaceAccordionProps) {
         <div className="flex items-center gap-3 shrink-0 ml-4">
           {balance !== null && (
             <span className="text-sm font-semibold text-text-primary tabular-nums">
-              +{balance.totalPoints} pts
+              +{balance} pts
             </span>
           )}
           <Badge variant="finished" size="sm" dot>Finished</Badge>
@@ -237,24 +238,31 @@ export function HistoryPage() {
           return
         }
 
-        // 2. Fetch user's league (to get leagueId for balance calls)
+        // 2. Fetch the user's first league and its points balance.
+        // The balance is per user+league, so it is the same for every race —
+        // fetch it once rather than per race.
         let leagueId: string | null = null
+        let leagueBalance: number | null = null
         try {
-          const leagues = await leaguesApi.getLeagues()
+          const leagues = await leaguesApi.getMyLeagues()
           if (leagues.length > 0) leagueId = leagues[0].id
         } catch {
           // no leagues — balance will be null
+        }
+        if (leagueId && user) {
+          try {
+            leagueBalance = await scoringApi.getBalance(user.id, leagueId)
+          } catch {
+            // scoring unavailable — balance stays null
+          }
         }
 
         // 3. For each finished race: fetch prediction + results + balance in parallel
         const raceDetails: RaceDetail[] = await Promise.all(
           finishedRaces.map(async (race) => {
-            const [predResult, resultsResult, balanceResult] = await Promise.allSettled([
+            const [predResult, resultsResult] = await Promise.allSettled([
               predictionsApi.getPrediction(race.id),
               f1dataApi.getRaceResults(race.id),
-              leagueId && user
-                ? scoringApi.getBalance(user.id, leagueId)
-                : Promise.reject(new Error('no league')),
             ])
 
             const prediction = predResult.status === 'fulfilled' ? predResult.value : null
@@ -264,27 +272,17 @@ export function HistoryPage() {
                 : race.id === 'race-1'
                 ? PLACEHOLDER_RESULTS
                 : []
-            const balance =
-              balanceResult.status === 'fulfilled' ? balanceResult.value : null
-
-            return { race, prediction, results, balance }
+            return { race, prediction, results, balance: leagueBalance }
           }),
         )
 
         if (cancelled) return
 
-        // 4. Compute total points from balances (de-duped per league)
-        const seenLeagues = new Set<string>()
-        let pts = 0
-        for (const d of raceDetails) {
-          if (d.balance && !seenLeagues.has(d.balance.leagueId)) {
-            pts += d.balance.totalPoints
-            seenLeagues.add(d.balance.leagueId)
-          }
-        }
-
+        // 4. The league balance is already a single total — the previous
+        // de-duplication keyed on balance.leagueId, a field the endpoint never
+        // returned, so it summed nothing.
         setDetails(raceDetails)
-        setTotalPoints(pts > 0 ? pts : null)
+        setTotalPoints(leagueBalance && leagueBalance > 0 ? leagueBalance : null)
       } catch {
         if (!cancelled) {
           // Fall back to placeholder data

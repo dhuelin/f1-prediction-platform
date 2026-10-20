@@ -117,70 +117,86 @@ export interface SubmitBetRequest {
 }
 
 // --- Leagues ---
+// These mirror the API exactly. They previously described a different design
+// entirely — League carried a nested `config` and `createdAt`, neither of which
+// LeagueResponse returns, and LeagueConfig shared no field at all with
+// ScoringConfigResponse. TypeScript could not catch that: the types were
+// self-consistent, just not consistent with the server.
 
-export type LeagueScoringMode = 'PROXIMITY' | 'EXACT'
-
-export interface LeagueConfig {
-  topNSize: number
-  scoringMode: LeagueScoringMode
-  bonusBetsEnabled: boolean
-  stakingEnabled: boolean
-  maxStakePerRace: number
-  maxBetsPerRace: number
-  catchUpPoints: number | null
-}
-
+/** GET /leagues, GET /leagues/mine, GET /leagues/{id}, POST /leagues, POST /leagues/{id}/join */
 export interface League {
   id: string
   name: string
+  visibility: LeagueVisibility
+  /** Only returned when the caller is the league admin; null otherwise. */
+  inviteCode: string | null
   adminUserId: string
-  inviteCode: string
   memberCount: number
-  config: LeagueConfig
-  createdAt: string
 }
 
+export type LeagueVisibility = 'PUBLIC' | 'PRIVATE'
+
+/** POST /leagues */
 export interface CreateLeagueRequest {
   name: string
-  config?: Partial<LeagueConfig>
+  visibility?: LeagueVisibility
 }
 
+/** POST /leagues/{id}/join */
 export interface JoinLeagueRequest {
-  inviteCode: string
+  inviteCode: string | null
+}
+
+/** GET /leagues/{id}/members */
+export interface LeagueMember {
+  userId: string
+  username: string
+  isAdmin: boolean
+  joinedAt: string
+}
+
+/** GET|PUT /leagues/{id}/config — the league's scoring rules. */
+export interface LeagueScoringConfig {
+  id: string
+  effectiveFromRace: number
+  predictionDepth: number
+  exactPositionPoints: number
+  /** JSON string, e.g. '[{"offset":1,"points":7}]' */
+  offsetTiers: string
+  inRangePoints: number
+  betMultiplier: number
+  /** JSON string, e.g. '{"fastestLap":true,...}' */
+  activeBets: string
+  sprintScoringEnabled: boolean
+  maxStakePerBet: number | null
+}
+
+/** PUT /leagues/{id}/config — every field optional except the three the API requires. */
+export interface UpdateScoringConfigRequest {
+  predictionDepth: number
+  exactPositionPoints: number
+  inRangePoints: number
+  offsetTiers?: string
+  betMultiplier?: number
+  activeBets?: string
+  sprintScoringEnabled?: boolean
+  maxStakePerBet?: number | null
 }
 
 // --- Standings & Scoring ---
 
+/** One row of GET /scores/leagues/{id}/standings. */
 export interface Standing {
+  userId: string
+  totalPoints: number
   rank: number
+}
+
+/** GET /scores/races/{raceId}/projected */
+export interface ProjectedStanding {
   userId: string
-  displayName: string
-  totalPoints: number
-  pointsBalance: number
-  racesScored: number
-}
-
-export interface LeagueStandings {
-  leagueId: string
-  leagueName: string
-  season: number
-  standings: Standing[]
-  updatedAt: string
-}
-
-export interface UserBalance {
-  userId: string
-  leagueId: string
-  totalPoints: number
-  pointsBalance: number
-  stakingBalance: number
-  racesScored: number
-}
-
-export interface AveragePoints {
-  leagueId: string
-  averagePoints: number
-  raceCount: number
+  projectedRacePoints: number
+  currentLeaguePoints: number
 }
 
 // --- Generic API wrappers ---

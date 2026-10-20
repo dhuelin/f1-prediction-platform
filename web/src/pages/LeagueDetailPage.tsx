@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Loader } from '@/components/ui/Loader'
 import { useAuthStore } from '@/store/authStore'
 import * as leaguesApi from '@/api/leagues'
-import type { League, LeagueStandings, Standing } from '@/api/types'
+import type { League, LeagueMember, LeagueScoringConfig, Standing } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -17,34 +17,29 @@ import { cn } from '@/lib/utils'
 const PLACEHOLDER_LEAGUE: League = {
   id: 'league-1',
   name: 'Paddock Pundits',
+  visibility: 'PRIVATE',
   adminUserId: 'user-admin',
   inviteCode: 'PUNDITS42',
   memberCount: 5,
-  config: {
-    topNSize: 10,
-    scoringMode: 'PROXIMITY',
-    bonusBetsEnabled: true,
-    stakingEnabled: true,
-    maxStakePerRace: 100,
-    maxBetsPerRace: 4,
-    catchUpPoints: null,
-  },
-  createdAt: '2026-01-01T00:00:00Z',
 }
 
-const PLACEHOLDER_STANDINGS: LeagueStandings = {
-  leagueId: 'league-1',
-  leagueName: 'Paddock Pundits',
-  season: 2026,
-  standings: [
-    { rank: 1, userId: 'user-1', displayName: 'Max V', totalPoints: 148, pointsBalance: 148, racesScored: 3 },
-    { rank: 2, userId: 'user-2', displayName: 'Lewis H', totalPoints: 132, pointsBalance: 132, racesScored: 3 },
-    { rank: 3, userId: 'user-3', displayName: 'Charles L', totalPoints: 119, pointsBalance: 119, racesScored: 3 },
-    { rank: 4, userId: 'user-4', displayName: 'Lando N', totalPoints: 101, pointsBalance: 101, racesScored: 3 },
-    { rank: 5, userId: 'user-admin', displayName: 'You', totalPoints: 88, pointsBalance: 88, racesScored: 3 },
-  ],
-  updatedAt: new Date().toISOString(),
-}
+// Standings are a flat array ordered by rank; usernames are not part of this
+// payload and are joined in from the members endpoint.
+const PLACEHOLDER_STANDINGS: Standing[] = [
+  { rank: 1, userId: 'user-1', totalPoints: 148 },
+  { rank: 2, userId: 'user-2', totalPoints: 132 },
+  { rank: 3, userId: 'user-3', totalPoints: 119 },
+  { rank: 4, userId: 'user-4', totalPoints: 101 },
+  { rank: 5, userId: 'user-admin', totalPoints: 88 },
+]
+
+const PLACEHOLDER_MEMBERS: LeagueMember[] = [
+  { userId: 'user-1', username: 'Max V', isAdmin: false, joinedAt: '2026-01-02T00:00:00Z' },
+  { userId: 'user-2', username: 'Lewis H', isAdmin: false, joinedAt: '2026-01-03T00:00:00Z' },
+  { userId: 'user-3', username: 'Charles L', isAdmin: false, joinedAt: '2026-01-04T00:00:00Z' },
+  { userId: 'user-4', username: 'Lando N', isAdmin: false, joinedAt: '2026-01-05T00:00:00Z' },
+  { userId: 'user-admin', username: 'You', isAdmin: true, joinedAt: '2026-01-01T00:00:00Z' },
+]
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -82,7 +77,16 @@ function Tabs({
 // ---------------------------------------------------------------------------
 // Standings row
 // ---------------------------------------------------------------------------
-function StandingRow({ standing, isCurrentUser }: { standing: Standing; isCurrentUser: boolean }) {
+function StandingRow({
+  standing,
+  username,
+  isCurrentUser,
+}: {
+  standing: Standing
+  /** Joined in from GET /leagues/{id}/members — standings carry only user ids. */
+  username: string
+  isCurrentUser: boolean
+}) {
   const rankBadge =
     standing.rank === 1
       ? 'text-yellow-400'
@@ -102,9 +106,9 @@ function StandingRow({ standing, isCurrentUser }: { standing: Standing; isCurren
       <span className={cn('w-6 text-right text-sm font-bold', rankBadge)}>
         {standing.rank}
       </span>
-      <Avatar name={standing.displayName} size="sm" />
+      <Avatar name={username} size="sm" />
       <span className={cn('flex-1 text-sm font-medium', isCurrentUser ? 'text-f1-red' : 'text-text-primary')}>
-        {standing.displayName}
+        {username}
         {isCurrentUser && (
           <span className="ml-1.5 text-xs text-text-muted">(you)</span>
         )}
@@ -126,7 +130,9 @@ export function LeagueDetailPage() {
   const { user } = useAuthStore()
 
   const [league, setLeague] = useState<League | null>(null)
-  const [standings, setStandings] = useState<LeagueStandings | null>(null)
+  const [standings, setStandings] = useState<Standing[] | null>(null)
+  const [members, setMembers] = useState<LeagueMember[] | null>(null)
+  const [config, setConfig] = useState<LeagueScoringConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error] = useState<string | null>(null)
 
@@ -137,6 +143,11 @@ export function LeagueDetailPage() {
   const [removingId, setRemovingId] = useState<string | null>(null)
 
   const [activeTab, setActiveTab] = useState(0)
+
+  // Standings carry user ids only; names come from the members endpoint.
+  const usernameById = new Map((members ?? []).map((m) => [m.userId, m.username]))
+  const usernameFor = (userId: string) =>
+    usernameById.get(userId) ?? `User ${userId.slice(0, 8)}`
 
   const isAdmin = user?.id === league?.adminUserId
 
@@ -149,28 +160,28 @@ export function LeagueDetailPage() {
     async function load() {
       if (!leagueId) return
       try {
-        const [leagueData, standingsData] = await Promise.allSettled([
+        // Members supply the usernames that standings omit; config is a separate
+        // endpoint rather than a field on the league.
+        const [leagueData, standingsData, membersData, configData] = await Promise.allSettled([
           leaguesApi.getLeague(leagueId),
           leaguesApi.getStandings(leagueId),
+          leaguesApi.getMembers(leagueId),
+          leaguesApi.getConfig(leagueId),
         ])
 
         if (cancelled) return
 
-        if (leagueData.status === 'fulfilled') {
-          setLeague(leagueData.value)
-        } else {
-          setLeague(PLACEHOLDER_LEAGUE)
-        }
-
-        if (standingsData.status === 'fulfilled') {
-          setStandings(standingsData.value)
-        } else {
-          setStandings(PLACEHOLDER_STANDINGS)
-        }
+        setLeague(leagueData.status === 'fulfilled' ? leagueData.value : PLACEHOLDER_LEAGUE)
+        setStandings(standingsData.status === 'fulfilled' ? standingsData.value : PLACEHOLDER_STANDINGS)
+        setMembers(membersData.status === 'fulfilled' ? membersData.value : PLACEHOLDER_MEMBERS)
+        // No fallback for config: showing invented scoring rules would be worse
+        // than showing none.
+        setConfig(configData.status === 'fulfilled' ? configData.value : null)
       } catch {
         if (!cancelled) {
           setLeague(PLACEHOLDER_LEAGUE)
           setStandings(PLACEHOLDER_STANDINGS)
+          setMembers(PLACEHOLDER_MEMBERS)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -200,14 +211,8 @@ export function LeagueDetailPage() {
     setRemovingId(userId)
     try {
       await leaguesApi.removeMember(leagueId, userId)
-      setStandings((prev) =>
-        prev
-          ? {
-              ...prev,
-              standings: prev.standings.filter((s) => s.userId !== userId),
-            }
-          : prev,
-      )
+      setStandings((prev) => (prev ? prev.filter((s) => s.userId !== userId) : prev))
+      setMembers((prev) => (prev ? prev.filter((m) => m.userId !== userId) : prev))
       setLeague((prev) => prev ? { ...prev, memberCount: prev.memberCount - 1 } : prev)
     } catch {
       // TODO: surface error
@@ -241,12 +246,11 @@ export function LeagueDetailPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="text-2xl font-bold text-text-primary">{league.name}</h1>
-              <Badge variant="default">{league.config.scoringMode}</Badge>
+              <Badge variant="default">{league.visibility}</Badge>
             </div>
             <p className="text-sm text-text-muted">
               {league.memberCount} member{league.memberCount !== 1 ? 's' : ''}
-              {' · '}
-              {league.config.bonusBetsEnabled ? 'Bonus bets enabled' : 'No bonus bets'}
+              {config && ` · Top ${config.predictionDepth}`}
             </p>
             {isAdmin && (
               <p className="mt-1 text-xs text-text-muted">
@@ -279,9 +283,9 @@ export function LeagueDetailPage() {
           header={
             <div className="flex items-center justify-between">
               <span className="font-semibold text-text-primary">Leaderboard</span>
-              {standings?.updatedAt && (
+              {standings && standings.length > 0 && (
                 <span className="text-xs text-text-muted">
-                  Updated {new Date(standings.updatedAt).toLocaleDateString()}
+                  {standings.length} ranked
                 </span>
               )}
             </div>
@@ -289,16 +293,17 @@ export function LeagueDetailPage() {
           noPadding
         >
           <div className="p-3 space-y-1">
-            {!standings || standings.standings.length === 0 ? (
+            {!standings || standings.length === 0 ? (
               <p className="py-6 text-center text-sm text-text-secondary">
                 No standings yet. Race results pending.
               </p>
             ) : (
-              standings.standings.map((s) => (
+              standings.map((standing) => (
                 <StandingRow
-                  key={s.userId}
-                  standing={s}
-                  isCurrentUser={s.userId === user?.id}
+                  key={standing.userId}
+                  standing={standing}
+                  username={usernameFor(standing.userId)}
+                  isCurrentUser={standing.userId === user?.id}
                 />
               ))
             )}
@@ -309,25 +314,31 @@ export function LeagueDetailPage() {
       {/* Tab: Settings (admin only) */}
       {activeTab === 1 && isAdmin && (
         <Card header={<span className="font-semibold text-text-primary">Scoring Config</span>}>
-          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {[
-              { label: 'Top-N Size', value: league.config.topNSize },
-              { label: 'Scoring Mode', value: league.config.scoringMode },
-              { label: 'Bonus Bets', value: league.config.bonusBetsEnabled ? 'Enabled' : 'Disabled' },
-              { label: 'Staking', value: league.config.stakingEnabled ? 'Enabled' : 'Disabled' },
-              { label: 'Max Stake / Race', value: `${league.config.maxStakePerRace} pts` },
-              { label: 'Max Bets / Race', value: league.config.maxBetsPerRace },
-              {
-                label: 'Catch-Up Points',
-                value: league.config.catchUpPoints !== null ? league.config.catchUpPoints : 'Off',
-              },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-md border border-border px-4 py-3">
-                <dt className="text-xs text-text-muted mb-1">{label}</dt>
-                <dd className="text-sm font-semibold text-text-primary">{String(value)}</dd>
-              </div>
-            ))}
-          </dl>
+          {!config ? (
+            <p className="py-6 text-center text-sm text-text-secondary">
+              Scoring config unavailable.
+            </p>
+          ) : (
+            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                { label: 'Prediction Depth', value: config.predictionDepth },
+                { label: 'Exact Position', value: `${config.exactPositionPoints} pts` },
+                { label: 'Within Range', value: `${config.inRangePoints} pts` },
+                { label: 'Bet Multiplier', value: `${config.betMultiplier}x` },
+                { label: 'Sprint Scoring', value: config.sprintScoringEnabled ? 'Enabled' : 'Disabled' },
+                {
+                  label: 'Max Stake / Bet',
+                  value: config.maxStakePerBet !== null ? `${config.maxStakePerBet} pts` : 'Unlimited',
+                },
+                { label: 'Effective From Race', value: config.effectiveFromRace },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-md border border-border px-4 py-3">
+                  <dt className="text-xs text-text-muted mb-1">{label}</dt>
+                  <dd className="text-sm font-semibold text-text-primary">{String(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
           <p className="mt-4 text-xs text-text-muted">
             Config changes are not yet supported from the web UI. Contact the platform admin.
           </p>
@@ -338,30 +349,30 @@ export function LeagueDetailPage() {
       {activeTab === (isAdmin ? 2 : -1) && isAdmin && (
         <Card header={<span className="font-semibold text-text-primary">Members</span>} noPadding>
           <div className="p-3 space-y-1">
-            {!standings || standings.standings.length === 0 ? (
+            {!members || members.length === 0 ? (
               <p className="py-6 text-center text-sm text-text-secondary">No members.</p>
             ) : (
-              standings.standings.map((s) => (
+              members.map((m) => (
                 <div
-                  key={s.userId}
+                  key={m.userId}
                   className="flex items-center gap-3 rounded-md px-3 py-2.5 hover:bg-surface-raised transition-colors"
                 >
-                  <Avatar name={s.displayName} size="sm" />
+                  <Avatar name={m.username} size="sm" />
                   <span className="flex-1 text-sm font-medium text-text-primary">
-                    {s.displayName}
-                    {s.userId === league.adminUserId && (
+                    {m.username}
+                    {m.isAdmin && (
                       <span className="ml-2 text-xs text-text-muted">(admin)</span>
                     )}
-                    {s.userId === user?.id && (
+                    {m.userId === user?.id && (
                       <span className="ml-1 text-xs text-text-muted">(you)</span>
                     )}
                   </span>
-                  {s.userId !== league.adminUserId && s.userId !== user?.id && (
+                  {!m.isAdmin && m.userId !== user?.id && (
                     <Button
                       variant="danger"
                       size="sm"
-                      loading={removingId === s.userId}
-                      onClick={() => setConfirmRemoveUserId(s.userId)}
+                      loading={removingId === m.userId}
+                      onClick={() => setConfirmRemoveUserId(m.userId)}
                     >
                       Remove
                     </Button>
@@ -407,7 +418,7 @@ export function LeagueDetailPage() {
           <p className="text-sm text-text-secondary">
             Remove{' '}
             <strong className="text-text-primary">
-              {standings?.standings.find((s) => s.userId === confirmRemoveUserId)?.displayName ?? 'this member'}
+              {confirmRemoveUserId ? usernameFor(confirmRemoveUserId) : 'this member'}
             </strong>{' '}
             from the league?
           </p>

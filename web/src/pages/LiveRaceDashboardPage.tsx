@@ -6,7 +6,8 @@ import { Loader } from '@/components/ui/Loader'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { useAuthStore } from '@/store/authStore'
 import { getPrediction } from '@/api/predictions'
-import { getProjectedScores, type ProjectedEntry } from '@/api/scoring'
+import { getProjectedScores } from '@/api/scoring'
+import type { ProjectedStanding } from '@/api/types'
 import { getLiveRaceState, type RaceState } from '@/api/f1data'
 import type { Prediction } from '@/api/types'
 
@@ -72,7 +73,7 @@ function LiveLeaderboardWidget({
   entries,
   currentUserId,
 }: {
-  entries: ProjectedEntry[]
+  entries: ProjectedStanding[]
   currentUserId: string | undefined
 }) {
   const sorted = [...entries].sort(
@@ -172,7 +173,7 @@ export function LiveRaceDashboardPage() {
   const { user } = useAuthStore()
 
   const [prediction, setPrediction] = useState<Prediction | null>(null)
-  const [projected, setProjected] = useState<ProjectedEntry[]>([])
+  const [projected, setProjected] = useState<ProjectedStanding[]>([])
   const [raceState, setRaceState] = useState<RaceState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

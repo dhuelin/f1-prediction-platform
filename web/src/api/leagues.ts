@@ -2,12 +2,21 @@ import apiClient from './client'
 import type {
   League,
   CreateLeagueRequest,
-  LeagueStandings,
-  LeagueConfig,
+  LeagueMember,
+  LeagueScoringConfig,
+  Standing,
+  UpdateScoringConfigRequest,
 } from './types'
 
+/** Public leagues available to browse. */
 export async function getLeagues(): Promise<League[]> {
   const { data } = await apiClient.get<League[]>('/leagues')
+  return data
+}
+
+/** Leagues the signed-in user belongs to, public or private. */
+export async function getMyLeagues(): Promise<League[]> {
+  const { data } = await apiClient.get<League[]>('/leagues/mine')
   return data
 }
 
@@ -21,25 +30,46 @@ export async function createLeague(payload: CreateLeagueRequest): Promise<League
   return data
 }
 
-export async function joinLeague(id: string, inviteCode: string): Promise<League> {
+export async function joinLeague(id: string, inviteCode: string | null): Promise<League> {
   const { data } = await apiClient.post<League>(`/leagues/${id}/join`, { inviteCode })
   return data
 }
 
-export async function getStandings(leagueId: string): Promise<LeagueStandings> {
-  const { data } = await apiClient.get<LeagueStandings>(
+/** Member list with usernames. Private-league rosters are members-only. */
+export async function getMembers(leagueId: string): Promise<LeagueMember[]> {
+  const { data } = await apiClient.get<LeagueMember[]>(`/leagues/${leagueId}/members`)
+  return data
+}
+
+/** Standings come back as a flat array ordered by rank. */
+export async function getStandings(leagueId: string): Promise<Standing[]> {
+  const { data } = await apiClient.get<Standing[]>(
     `/scores/leagues/${leagueId}/standings`,
   )
   return data
 }
 
+export async function getConfig(leagueId: string): Promise<LeagueScoringConfig> {
+  const { data } = await apiClient.get<LeagueScoringConfig>(`/leagues/${leagueId}/config`)
+  return data
+}
+
+/**
+ * Update a league's scoring rules.
+ *
+ * PUT, not POST, and `nextRace` is required: a config change takes effect from a
+ * race number rather than immediately, so mid-season edits cannot rescore races
+ * already run. The previous version POSTed without it, which the API rejected.
+ */
 export async function updateConfig(
   leagueId: string,
-  payload: Partial<LeagueConfig>,
-): Promise<LeagueConfig> {
-  const { data } = await apiClient.post<LeagueConfig>(
+  nextRace: number,
+  payload: UpdateScoringConfigRequest,
+): Promise<LeagueScoringConfig> {
+  const { data } = await apiClient.put<LeagueScoringConfig>(
     `/leagues/${leagueId}/config`,
     payload,
+    { params: { nextRace } },
   )
   return data
 }

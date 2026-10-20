@@ -8,7 +8,7 @@ import * as f1Api from '@/api/f1data'
 import * as predictionsApi from '@/api/predictions'
 import * as leaguesApi from '@/api/leagues'
 import * as scoringApi from '@/api/scoring'
-import type { Race, Prediction, League, UserBalance } from '@/api/types'
+import type { Race, Prediction, League } from '@/api/types'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,8 @@ function CountdownBlock({ label, value }: { label: string; value: number }) {
 
 interface LeagueRowProps {
   league: League
-  balance: UserBalance | null
+  /** Points total in this league — the API returns a bare number. */
+  balance: number | null
 }
 
 function LeagueRow({ league, balance }: LeagueRowProps) {
@@ -121,7 +122,7 @@ function LeagueRow({ league, balance }: LeagueRowProps) {
       <span className="text-sm font-medium text-text-primary">{league.name}</span>
       <span className="text-sm text-text-secondary">
         {balance !== null ? (
-          <span className="font-semibold text-f1-red">{balance.totalPoints} pts</span>
+          <span className="font-semibold text-f1-red">{balance} pts</span>
         ) : (
           <span className="text-text-muted">—</span>
         )}
@@ -146,7 +147,7 @@ export function HomePage() {
   const [prediction, setPrediction] = useState<Prediction | null>(null)
   const [predictionStatus, setPredictionStatus] = useState<'submitted' | 'not-submitted' | 'locked' | 'loading'>('loading')
   const [leagues, setLeagues] = useState<League[]>([])
-  const [balances, setBalances] = useState<Map<string, UserBalance>>(new Map())
+  const [balances, setBalances] = useState<Map<string, number>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error] = useState<string | null>(null)
 
@@ -213,7 +214,7 @@ export function HomePage() {
             leagueList.map((l) => scoringApi.getBalance(user.id, l.id)),
           )
           if (cancelled) return
-          const map = new Map<string, UserBalance>()
+          const map = new Map<string, number>()
           balanceEntries.forEach((result, i) => {
             if (result.status === 'fulfilled') {
               map.set(leagueList[i].id, result.value)

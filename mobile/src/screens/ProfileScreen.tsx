@@ -22,7 +22,14 @@ async function getNotificationPrefs(): Promise<NotificationPrefs> {
   return data
 }
 
-async function updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<void> {
+/**
+ * Replaces all four preferences.
+ *
+ * UpdatePreferencesRequest declares four primitive booleans, so any field left
+ * out of the body deserializes as false. Sending a single changed key therefore
+ * switched the other three notifications off.
+ */
+async function updateNotificationPrefs(prefs: NotificationPrefs): Promise<void> {
   await apiClient.put('/notifications/preferences', prefs)
 }
 
@@ -52,7 +59,7 @@ export default function ProfileScreen() {
   const toggleNotifPref = async (key: keyof NotificationPrefs) => {
     const updated = { ...notifPrefs, [key]: !notifPrefs[key] }
     setNotifPrefs(updated)
-    updateNotificationPrefs({ [key]: updated[key] }).catch(() => {
+    updateNotificationPrefs(updated).catch(() => {
       setNotifPrefs(notifPrefs)
     })
   }

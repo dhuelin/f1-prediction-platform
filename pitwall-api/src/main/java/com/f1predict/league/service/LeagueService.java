@@ -113,6 +113,23 @@ public class LeagueService implements LeagueDirectory {
             .toList();
     }
 
+    /**
+     * Leagues the caller belongs to.
+     *
+     * The web app has always had a "My Leagues" tab, but the only list endpoint
+     * returns PUBLIC leagues, so it showed the browse list in both tabs — a user's
+     * own private leagues never appeared anywhere.
+     */
+    public List<LeagueResponse> listMyLeagues(UUID userId) {
+        List<UUID> leagueIds = memberRepository.findByUserId(userId).stream()
+            .map(LeagueMember::getLeagueId)
+            .toList();
+        if (leagueIds.isEmpty()) return List.of();
+        return leagueRepository.findAllById(leagueIds).stream()
+            .map(l -> toResponse(l, userId, memberRepository.countByLeagueId(l.getId())))
+            .toList();
+    }
+
     public LeagueResponse getLeague(UUID leagueId, UUID requesterId) {
         League league = leagueRepository.findById(leagueId)
             .orElseThrow(() -> new NoSuchElementException("League not found"));

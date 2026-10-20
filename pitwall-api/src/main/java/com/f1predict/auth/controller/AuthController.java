@@ -49,6 +49,15 @@ public class AuthController {
         return authService.login(request);
     }
 
+    // Revoke the refresh token for a signed-out session.
+    // The body is optional so a client that sends none still gets a 204 rather
+    // than a validation error; it simply has nothing to revoke.
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(@RequestBody(required = false) RefreshRequest request) {
+        authService.logout(request == null ? null : request.refreshToken());
+    }
+
     @PostMapping("/refresh")
     public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
         return authService.refresh(request);

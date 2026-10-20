@@ -34,6 +34,13 @@ public class LeagueController {
         return leagueService.listPublicLeagues();
     }
 
+    // Leagues the caller is a member of. Declared before /{leagueId} for clarity;
+    // Spring matches the literal path first regardless of order.
+    @GetMapping("/mine")
+    public List<LeagueResponse> listMine(@RequestHeader("X-User-Id") UUID userId) {
+        return leagueService.listMyLeagues(userId);
+    }
+
     // #65 — Get single league
     @GetMapping("/{leagueId}")
     public LeagueResponse get(

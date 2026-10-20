@@ -124,6 +124,28 @@ public class AuthService {
         return new AuthResponse(jwtService.generateAccessToken(user), newRefreshRaw, accessTokenExpiry);
     }
 
+    /**
+     * Revokes a refresh token so a signed-out session cannot be resumed.
+     *
+     * The web client called POST /auth/logout from the start, but no such endpoint
+     * existed — the request 404'd inside a try/finally that cleared local storage
+     * anyway, so "logging out" left the refresh token valid server-side for its
+     * full 30 days.
+     *
+     * Deliberately silent about unknown tokens: logout is not an oracle for which
+     * refresh tokens exist, and a client clearing stale credentials should get a
+     * success either way. Safe to call twice.
+     */
+    @Transactional
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) return;
+        refreshTokenRepository.findByTokenHash(hashToken(refreshToken))
+            .ifPresent(stored -> {
+                stored.setRevoked(true);
+                refreshTokenRepository.save(stored);
+            });
+    }
+
     @Transactional
     public AuthResponse issueTokens(User user) {
         refreshTokenRepository.deleteAllByUserId(user.getId());  // invalidate prior sessions

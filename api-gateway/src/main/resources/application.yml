@@ -41,6 +41,29 @@ spring:
           uri: http://f1-data-service:8085
           predicates:
             - Path=/f1/**
+        # Joining by invite code is the one place a code alone grants access to a
+        # private league, so it gets its own limit. Declared BEFORE the general
+        # pitwall-api route: Spring Cloud Gateway takes the first route whose
+        # predicates match, so the broader Path=/leagues/** below would otherwise
+        # swallow this one and the limit would never apply.
+        #
+        # Keyed on the authenticated user, not the IP — see RateLimiterConfig.
+        # 1 token/s with 10 tokens per request and a 60-token bucket is six
+        # attempts back-to-back, then one every ten seconds. A human correcting a
+        # mistyped code never notices; an account is capped near 8,600 tries a day
+        # against a 50-bit code space, which is about 3.5e7 years for even odds.
+        - id: pitwall-api-league-join
+          uri: http://pitwall-api:8081
+          predicates:
+            - Path=/leagues/join
+            - Method=POST
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.requestedTokens: 10
+                redis-rate-limiter.burstCapacity: 60
+                key-resolver: "#{@userKeyResolver}"
         - id: pitwall-api
           uri: http://pitwall-api:8081
           predicates:

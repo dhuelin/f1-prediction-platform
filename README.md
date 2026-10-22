@@ -322,6 +322,40 @@ If the deployment has no data worth keeping (only smoke-test accounts), skip all
 of this — the deploy creates `pitwall_db` and Flyway builds the schema from
 scratch.
 
+### Rate limiting
+
+Two routes carry a `RequestRateLimiter` (Redis-backed, so the limit is shared
+across gateway instances):
+
+| Route | Limit | Key |
+|-------|-------|-----|
+| `/auth/**` | 5/s, burst 10 | client IP — **see caveat** |
+| `POST /leagues/join` | 6 back-to-back, then 1 per 10s | authenticated user |
+
+`POST /leagues/join` is the one endpoint where an invite code alone grants entry
+to a private league, so it is limited per user rather than per IP. The user id
+comes from `X-User-Id`, which `JwtGatewayFilter` writes from a verified JWT after
+stripping any client-supplied copy, and that filter is a `GlobalFilter` ordered
+`-1` so it runs before route filters. The key therefore cannot be rotated by an
+attacker. Against a 50-bit invite code, ~8,600 attempts/day/account is roughly
+3.5e7 years for even odds.
+
+The route is declared **before** the general `pitwall-api` route on purpose:
+Spring Cloud Gateway takes the first route whose predicates match, and the
+general route's `Path=/leagues/**` also matches `/leagues/join`. Put it second
+and the limit silently stops applying. `GatewayRouteOrderTest` fails if that
+ordering is ever broken.
+
+**Caveat on the `/auth/**` limit:** its `remoteAddrKeyResolver` reads the socket
+peer address, but the gateway sits behind nginx on localhost, so every request
+resolves to `127.0.0.1`. That limit currently behaves as a single global bucket
+rather than per-client. Fixing it means choosing which forwarded header to trust
+(`CF-Connecting-IP` or the left-most `X-Forwarded-For`) and deciding whether the
+origin may be reached without going through Cloudflare — today it can, because
+`api.pitwall.guru` is a DNS-only record with port 80 open, so either header is
+forgeable by going straight to the IP. Until that is settled, per-user keys are
+the trustworthy option for authenticated routes.
+
 ### Database backups
 
 `deploy.yml` installs `infra/backup-db.sh` on the production server and registers

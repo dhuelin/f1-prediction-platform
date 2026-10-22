@@ -16,6 +16,7 @@ import com.f1predict.league.repository.ScoringConfigRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -120,7 +121,8 @@ public class LeagueService implements LeagueDirectory {
         if (inviteCode == null || inviteCode.isBlank()) {
             throw new IllegalArgumentException("Invite code is required");
         }
-        String code = inviteCode.trim();
+        // Generated codes are upper-case; accept any casing the user types.
+        String code = inviteCode.trim().toUpperCase();
         League league = leagueRepository.findByInviteCode(code)
             .orElseThrow(() -> new NoSuchElementException("No league found for that invite code"));
         return joinLeague(userId, league.getId(), new JoinLeagueRequest(code));
@@ -255,8 +257,48 @@ public class LeagueService implements LeagueDirectory {
         );
     }
 
+    /**
+     * Alphabet for invite codes: upper-case letters and digits with the
+     * easily-confused glyphs removed (no I, O, 0 or 1), since these get read aloud
+     * and retyped. 32 symbols, so each character carries exactly 5 bits.
+     */
+    private static final char[] INVITE_CODE_ALPHABET =
+        "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+
+    /** 10 chars x 5 bits = 50 bits, and exactly the width of the invite_code column. */
+    private static final int INVITE_CODE_LENGTH = 10;
+
+    private static final SecureRandom INVITE_CODE_RANDOM = new SecureRandom();
+
+    /**
+     * An invite code no other league holds.
+     *
+     * The previous version took the first 8 hex characters of a UUID — 32 bits, and
+     * only 16 symbols per character. POST /leagues/join resolves a league from its
+     * code alone, so the code is the whole secret guarding a private league, and
+     * /leagues/** has no rate limiter. 50 bits puts guessing out of reach.
+     *
+     * The retry exists so a collision cannot silently hand two leagues the same
+     * code, which would make a join land in whichever one the query returned first.
+     * At 50 bits it should never iterate; the UNIQUE constraint added in V12 is the
+     * backstop if it somehow does.
+     */
     private String generateInviteCode() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String code = randomInviteCode();
+            if (leagueRepository.findByInviteCode(code).isEmpty()) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Could not generate an unused invite code");
+    }
+
+    private static String randomInviteCode() {
+        StringBuilder sb = new StringBuilder(INVITE_CODE_LENGTH);
+        for (int i = 0; i < INVITE_CODE_LENGTH; i++) {
+            sb.append(INVITE_CODE_ALPHABET[INVITE_CODE_RANDOM.nextInt(INVITE_CODE_ALPHABET.length)]);
+        }
+        return sb.toString();
     }
 
     /**

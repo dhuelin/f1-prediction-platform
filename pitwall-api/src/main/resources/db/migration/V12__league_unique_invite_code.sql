@@ -1,0 +1,13 @@
+-- Invite codes identify a league on their own via POST /leagues/join, so two
+-- leagues sharing one would send a joiner to whichever row the query returned
+-- first. Nothing enforced that before.
+--
+-- PUBLIC leagues store NULL here and Postgres treats NULLs as distinct under a
+-- UNIQUE constraint, so they are unaffected and any number of them may coexist.
+--
+-- If this migration fails, the existing data already contains duplicate invite
+-- codes: find them with
+--   SELECT invite_code, count(*) FROM leagues
+--   WHERE invite_code IS NOT NULL GROUP BY invite_code HAVING count(*) > 1;
+-- and re-issue one of each pair before migrating.
+ALTER TABLE leagues ADD CONSTRAINT uq_leagues_invite_code UNIQUE (invite_code);

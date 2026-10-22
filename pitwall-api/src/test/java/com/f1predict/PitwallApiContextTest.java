@@ -75,7 +75,8 @@ class PitwallApiContextTest {
     void allMigrationsApplyToTheSingleDatabase() {
         Integer applied = jdbc.queryForObject(
             "select count(*) from flyway_schema_history where success", Integer.class);
-        assertThat(applied).isEqualTo(11);
+        // One per file in db/migration — bump this when adding a migration.
+        assertThat(applied).isEqualTo(12);
 
         // Every domain's tables now live in one schema; JPA runs with
         // ddl-auto=validate, so booting at all proves the entities still match.

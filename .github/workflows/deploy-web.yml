@@ -35,11 +35,20 @@ jobs:
       - name: Build (production)
         working-directory: web
         env:
-          # The API is served from api.pitwall.guru (DNS-only record straight to the
-          # VPS). pitwall.guru itself is proxied through Cloudflare and serves the
-          # launch page, so pointing the app there sent every API call to the
-          # marketing site.
-          VITE_API_BASE_URL: https://api.pitwall.guru
+          # The API lives under the apex, not api.pitwall.guru.
+          #
+          # .github/deploy/nginx-pitwall.conf has one server block — listen 80,
+          # server_name "pitwall.guru www.pitwall.guru" — and it proxies
+          # /auth|/f1|/predictions|/leagues|/scores|/notifications|/analytics|/ws
+          # to the api-gateway, serving the launch page for everything else.
+          # Verified live: https://pitwall.guru/f1/calendar/current returns 401
+          # from the gateway, so the apex does reach the API.
+          #
+          # api.pitwall.guru is a DNS-only record straight to the VPS, and nginx
+          # has no 443 listener or certificate, so a direct HTTPS request to it is
+          # reset during the TLS handshake. It answers on plain HTTP only. Pointing
+          # the app at https://api.pitwall.guru therefore breaks every API call.
+          VITE_API_BASE_URL: https://pitwall.guru
         run: npm run build
 
       - name: Deploy to Cloudflare Pages

@@ -89,6 +89,22 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           known_hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
+      # A deploy step can legitimately sit silent for minutes -- a Spring Boot
+      # start, a large dump, an image pull on a small VPS. Without keepalives the
+      # client gives up on a quiet connection and the step dies with
+      # "client_loop: send disconnect: Broken pipe" and exit 255, which looks
+      # like a script failure but is the SSH session dropping.
+      - name: Configure SSH keepalives
+        run: |
+          cat >> ~/.ssh/config <<'EOF'
+          Host *
+            ServerAliveInterval 30
+            ServerAliveCountMax 20
+            ConnectTimeout 30
+            TCPKeepAlive yes
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Prepare docker-compose.prod.yml
         env:
           SHA: ${{ github.sha }}
@@ -146,10 +162,27 @@ jobs:
             cd /opt/f1predict
             chmod +x backup-db.sh consolidate-databases.sh
 
-            # Postgres may be down if the stack was in a restart loop. Bring up
-            # just that one container; the application containers are replaced
-            # further down.
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d postgres
+            # Postgres has to be up to dump it, but it must NOT be recreated
+            # here. This compose file adds a mem_limit to postgres, so a plain
+            # `up -d postgres` sees a changed config and replaces the container
+            # -- taking the database down while the superseded per-service
+            # containers are still running and reconnecting hard. On a VPS that
+            # is already memory-tight that is enough to wedge the whole box:
+            # every SSH session stalls, outbound network stops, and the deploy
+            # dies with a broken pipe. It happened, on run 26.
+            #
+            # So: use the running container as it is, and only start one if
+            # there is none. --no-recreate leaves an existing container alone
+            # even when the config has changed; postgres picks up its mem_limit
+            # later, in the step that replaces the application containers, by
+            # which point the old JVMs are gone and the memory is free.
+            if [ -n "$(docker ps -q -f name=^f1predict-postgres-1$)" ]; then
+              echo "  postgres: already running, left untouched"
+            else
+              echo "  postgres: not running, starting without recreating"
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+                up -d --no-recreate postgres
+            fi
             for i in $(seq 1 24); do
               docker exec f1predict-postgres-1 pg_isready -U f1predict >/dev/null 2>&1 && break
               echo "  waiting for postgres... ($i/24)"
@@ -200,6 +233,38 @@ jobs:
                 /opt/f1predict/web-static
             fi
             echo "  launch page: synced ($(ls /opt/f1predict/web-static | wc -l) files)"
+          '
+
+      - name: Retire the superseded per-service containers
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          # This release replaces six JVMs with one, and the box does not have
+          # room to run both sets at once. Stopping the old containers before
+          # pulling means the new ones start on a box with memory free, rather
+          # than competing with services they have already replaced.
+          #
+          # auth-service, league-service, prediction-service, scoring-service,
+          # notification-service and analytics-service are not in the new
+          # compose files at all, so Compose treats them as orphans of this
+          # project and --remove-orphans is enough to identify and remove them.
+          # No hardcoded container list to drift out of date.
+          #
+          # Infrastructure is named explicitly with --no-recreate so postgres,
+          # redis and rabbitmq keep running untouched: the backup above has
+          # already been taken, but there is no reason to interrupt them.
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -euo pipefail
+            cd /opt/f1predict
+            echo "  running before:"
+            docker ps --format "    {{.Names}}  {{.Status}}"
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              up -d --no-recreate --remove-orphans postgres redis rabbitmq
+            echo "  running after:"
+            docker ps --format "    {{.Names}}  {{.Status}}"
+            echo "  memory:"
+            free -m | sed "s/^/    /"
           '
 
       # Before the application containers, not after: pitwall-api connects to
@@ -371,10 +436,16 @@ jobs:
           echo "All smoke tests passed ✓"
 
   # ── 3. Deploy to test environment (test.pitwall.guru) ────────────────────
+  # Runs AFTER the production deploy, not alongside it. DEPLOY_HOST is the same
+  # machine for both, so in parallel the two jobs pull images, replace
+  # containers and run dumps on one small VPS at the same time. On run 26 that
+  # left the box unresponsive for four minutes: both jobs lost their SSH
+  # sessions to broken pipes and the site stopped answering. Serialising them
+  # costs a few minutes and removes the contention.
   deploy-test:
     name: Deploy to Test Server
     runs-on: ubuntu-latest
-    needs: build-images
+    needs: [build-images, deploy]
     environment: test
     concurrency:
       group: test-deploy

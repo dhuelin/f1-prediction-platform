@@ -48,8 +48,9 @@ services:
   rabbitmq:
     restart: unless-stopped
     mem_limit: 384m
-    environment:
-      RABBITMQ_VM_MEMORY_HIGH_WATERMARK: "0.5"
+    # Deliberately no RABBITMQ_VM_MEMORY_HIGH_WATERMARK -- the image's
+    # entrypoint exits 1 if it is set. See the note in
+    # docker-compose.prod.yml.tpl.
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s

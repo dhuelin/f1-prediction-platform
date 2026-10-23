@@ -29,9 +29,19 @@ services:
   rabbitmq:
     restart: unless-stopped
     mem_limit: 448m
-    environment:
-      # Relative to the cgroup limit above, not to host RAM
-      RABBITMQ_VM_MEMORY_HIGH_WATERMARK: "0.5"
+    # No RABBITMQ_VM_MEMORY_HIGH_WATERMARK here. The official image's entrypoint
+    # keeps that variable on a deprecatedEnvVars list and does `exit 1` the
+    # moment it is set -- before RabbitMQ starts at all. Setting it took
+    # production down on run 27: the container exited in about a second, Compose
+    # reported "dependency failed to start: container f1predict-rabbitmq-1 is
+    # unhealthy", and pitwall-api, f1-data-service and api-gateway all refused
+    # to start behind it.
+    #
+    # Not needed either. RabbitMQ reads the cgroup limit above and takes its
+    # default 0.4 high watermark from that, not from host RAM -- roughly 179 MB
+    # here -- which is the behaviour the variable was meant to produce. Raising
+    # it requires a configuration file; see
+    # https://www.rabbitmq.com/configure.html
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 30s

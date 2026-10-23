@@ -170,3 +170,84 @@ jobs:
       - name: TypeScript check
         working-directory: mobile
         run: npx tsc --noEmit
+
+  # ── Deploy-template smoke test ────────────────────────────────────────────
+  # The docker-smoke-test job above runs docker-compose.yml with
+  # docker-compose.dev.yml, so the production and test templates are never
+  # started by any check. A RABBITMQ_VM_MEMORY_HIGH_WATERMARK line sat in the
+  # prod template through several green CI runs and then took production down:
+  # the image's entrypoint keeps that variable on a deprecated list and exits 1
+  # before RabbitMQ starts, so the container died in about a second and the
+  # three application services, which depend on it being healthy, never came up.
+  #
+  # Starting the infrastructure services from the real templates with the real
+  # images catches that class of fault -- anything that makes a container refuse
+  # to start under its production configuration. The application services are
+  # skipped: their images live in GHCR and are built by the deploy, not here.
+  deploy-template-smoke:
+    name: Deploy Template Smoke Test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        template: [prod, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render ${{ matrix.template }} template
+        run: |
+          # The image tags only matter for the application services, which are
+          # not started here, so any placeholder will do.
+          sed \
+            -e "s|IMAGE_PREFIX|ghcr.io/placeholder|g" \
+            -e "s|IMAGE_TAG|placeholder|g" \
+            .github/deploy/docker-compose.${{ matrix.template }}.yml.tpl \
+            > docker-compose.rendered.yml
+
+      - name: Validate merged configuration
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.rendered.yml config >/dev/null
+          echo "  merged configuration is valid"
+
+      - name: Start infrastructure from the ${{ matrix.template }} template
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.rendered.yml \
+            up -d postgres redis rabbitmq
+
+      - name: Every infrastructure container must become healthy
+        run: |
+          # A container that exits on a bad configuration shows up here as
+          # "exited" rather than "healthy", which is exactly what the prod
+          # template did to rabbitmq.
+          for name in postgres redis rabbitmq; do
+            cid=$(docker compose -f docker-compose.yml -f docker-compose.rendered.yml ps -q "$name")
+            if [ -z "$cid" ]; then
+              echo "FAIL: $name has no container"
+              exit 1
+            fi
+            for attempt in $(seq 1 30); do
+              state=$(docker inspect -f '{{.State.Status}}' "$cid")
+              health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid")
+              echo "  $name: $state/$health (attempt $attempt/30)"
+              case "$state/$health" in
+                running/healthy|running/none) echo "  $name: ok"; break ;;
+                exited/*|dead/*)
+                  echo "FAIL: $name exited under the ${{ matrix.template }} template"
+                  docker logs "$cid" 2>&1 | tail -30
+                  exit 1 ;;
+              esac
+              # restarting counts as not-yet-healthy, but a container that keeps
+              # restarting never reaches healthy and fails on the last attempt
+              [ "$attempt" -lt 30 ] && sleep 5 || {
+                echo "FAIL: $name never became healthy"
+                docker logs "$cid" 2>&1 | tail -30
+                exit 1; }
+            done
+          done
+          echo "all infrastructure containers healthy under the ${{ matrix.template }} template"
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.rendered.yml \
+            down -v --remove-orphans || true

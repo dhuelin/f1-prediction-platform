@@ -379,6 +379,63 @@ jobs:
           PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
+          # The apex is the API host by design: .github/deploy/nginx-pitwall.conf
+          # has one server block, "server_name pitwall.guru www.pitwall.guru",
+          # which proxies /auth, /f1, /predictions, /leagues, /scores,
+          # /notifications, /analytics and /ws to the api-gateway and serves the
+          # launch page for everything else.
+          #
+          # Default to it when vars.PROD_BASE_URL is unset, so the smoke test
+          # works on a repository that has never configured the variable -- the
+          # test-environment equivalent below already skips itself in that case,
+          # and silently testing nothing is worse than testing the known host.
+          BASE="${PROD_BASE_URL:-https://pitwall.guru}"
+          echo "  base URL: $BASE"
+
+          # Preflight: distinguish "cannot connect at all" from "service still
+          # starting" before spending ten minutes on the difference.
+          #
+          # On run 28 every one of the 30 attempts returned HTTP 000 while the
+          # site was demonstrably serving: the configured base URL was a host
+          # with no HTTPS listener, so curl failed in the TLS handshake with
+          # exit 35 and "%{http_code}" reported 000. A connection that is
+          # refused or reset is a configuration problem and will not fix itself,
+          # so say so once and stop, with curl's own error text.
+          echo "── 0. Reachability of $BASE ─────────────────────"
+          APEX="https://pitwall.guru"
+          reachable() {
+            curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 15 \
+              --max-time 30 "$1/" 2>&1
+          }
+          if PREFLIGHT=$(reachable "$BASE"); then
+            echo "  reachable (HTTP $PREFLIGHT)"
+          else
+            echo "::warning::vars.PROD_BASE_URL ($BASE) is not reachable: $PREFLIGHT"
+            echo "  cannot connect to $BASE -- curl said: $PREFLIGHT"
+            if [ "$BASE" = "$APEX" ]; then
+              echo "FAIL: the apex itself is unreachable, so this is the"
+              echo "      deployment, not the configuration."
+              exit 1
+            fi
+            # Production may be perfectly healthy behind a base URL that simply
+            # does not terminate TLS, which is what happened on run 28:
+            # api.pitwall.guru is a DNS-only record whose nginx has no 443
+            # listener and no certificate, so HTTPS to it is reset
+            # mid-handshake and every attempt reads as HTTP 000. Failing the
+            # deploy over a stale repository variable, while the apex is
+            # serving, reports the wrong problem. Verify against the apex --
+            # which nginx-pitwall.conf makes the API host anyway -- and leave
+            # the warning above for the variable.
+            echo "  falling back to the apex and continuing"
+            if PREFLIGHT=$(reachable "$APEX"); then
+              BASE="$APEX"
+              echo "  base URL now: $BASE (HTTP $PREFLIGHT)"
+            else
+              echo "FAIL: neither $BASE nor $APEX is reachable -- curl said: $PREFLIGHT"
+              exit 1
+            fi
+          fi
+
           # Helper: retry a plain HTTP check (for gateway/startup errors)
           # 30 attempts × 20s = 600s (10 min) — Spring Boot on VPS can take 4-5 min cold
           wait_for_service() {
@@ -398,7 +455,7 @@ jobs:
 
           # Wait for api-gateway / Spring Boot first — covers both API and launch page
           echo "── 1. Wait for api-gateway (Spring Boot ~2-3 min) ─"
-          wait_for_service "auth-gateway" "${PROD_BASE_URL}/auth/register" || exit 1
+          wait_for_service "auth-gateway" "${BASE}/auth/register" || exit 1
 
           echo "── 2. Launch page ───────────────────────────────"
           PAGE_STATUS=$(curl -s -o /tmp/page.html -w "%{http_code}" --connect-timeout 10 "https://pitwall.guru")
@@ -411,7 +468,7 @@ jobs:
           SMOKE_EMAIL="smoke-${SMOKE_RUN_ID}@pitwall.guru"
           TOKEN=""
           for reg_attempt in $(seq 1 5); do
-            REG=$(curl -s -X POST "${PROD_BASE_URL}/auth/register" \
+            REG=$(curl -s -X POST "${BASE}/auth/register" \
               -H "Content-Type: application/json" \
               -d "{\"email\":\"${SMOKE_EMAIL}\",\"password\":\"SmokeTest1!\",\"username\":\"smoke${SMOKE_RUN_ID}\"}")
             TOKEN=$(echo "$REG" | grep -o '"accessToken":"[^"]*"' | sed 's/"accessToken":"//;s/"//')
@@ -423,13 +480,13 @@ jobs:
 
           echo "── 4. F1 data service — authenticated call ───────"
           F1_STATUS=$(curl -s -o /tmp/f1.json -w "%{http_code}" --connect-timeout 10 \
-            -H "Authorization: Bearer $TOKEN" "${PROD_BASE_URL}/f1/calendar/current")
+            -H "Authorization: Bearer $TOKEN" "${BASE}/f1/calendar/current")
           echo "  f1data → HTTP $F1_STATUS"
           echo "$F1_STATUS" | grep -qE "^(200|404)$" || { echo "FAIL: f1data returned $F1_STATUS"; exit 1; }
 
           echo "── 5. Analytics service — authenticated call ─────"
           AN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 \
-            -H "Authorization: Bearer $TOKEN" "${PROD_BASE_URL}/analytics/participation")
+            -H "Authorization: Bearer $TOKEN" "${BASE}/analytics/participation")
           echo "  analytics → HTTP $AN_STATUS"
           echo "$AN_STATUS" | grep -qE "^(200|404)$" || { echo "FAIL: analytics returned $AN_STATUS"; exit 1; }
 

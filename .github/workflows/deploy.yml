@@ -530,6 +530,7 @@ jobs:
         run: |
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'mkdir -p ~/f1predict-test'
           scp docker-compose.yml docker-compose.test.yml \
+            infra/backup-db.sh infra/consolidate-databases.sh \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:~/f1predict-test/
 
       - name: Bootstrap test .env (generate secrets if missing)
@@ -550,6 +551,51 @@ jobs:
               echo "  JWT_SECRET: generated"
             else
               echo "  JWT_SECRET: already set"
+            fi
+          '
+
+      - name: Pre-deploy backup of every test database
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          # Same reasoning as the production job: this release replaces the test
+          # environment's six per-service databases with pitwall_db, so there is
+          # data to preserve and no reason to change anything before it is
+          # dumped. POSTGRES_CONTAINER and STACK_DIR are all the scripts need to
+          # point at the test stack instead.
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -euo pipefail
+            cd ~/f1predict-test
+            chmod +x backup-db.sh consolidate-databases.sh
+
+            # Never recreate postgres to back it up -- see the note in the
+            # production job; doing so took production down on run 27.
+            if [ -n "$(docker ps -q -f name=^f1predict-test-postgres-1$)" ]; then
+              echo "  test postgres: already running, left untouched"
+            else
+              echo "  test postgres: not running, starting without recreating"
+              docker compose --project-name f1predict-test \
+                -f docker-compose.yml -f docker-compose.test.yml \
+                up -d --no-recreate postgres
+            fi
+            for i in $(seq 1 24); do
+              docker exec f1predict-test-postgres-1 pg_isready -U f1predict >/dev/null 2>&1 && break
+              echo "  waiting for test postgres... ($i/24)"
+              sleep 5
+            done
+            docker exec f1predict-test-postgres-1 pg_isready -U f1predict
+
+            ALL=$(docker exec f1predict-test-postgres-1 psql -U f1predict -d postgres -tAc \
+              "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> '"'"'postgres'"'"' ORDER BY 1" \
+              | tr -d "\r" | tr "\n" " ")
+            echo "  test databases: ${ALL:-none}"
+
+            if [ -n "${ALL// /}" ]; then
+              DATABASES="$ALL" STACK_DIR=~/f1predict-test \
+                POSTGRES_CONTAINER=f1predict-test-postgres-1 ./backup-db.sh
+            else
+              echo "  no test databases yet -- nothing to back up"
             fi
           '
 
@@ -605,6 +651,33 @@ jobs:
                 || docker exec f1predict-test-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
               echo "  ${db}: ready"
             done
+          '
+
+      - name: Consolidate the per-service test databases into pitwall_db
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          # Mirror of the production step. Idempotent and read-only against the
+          # old databases, so it is safe on every deploy and exits 0 doing
+          # nothing once the test environment has been consolidated.
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -euo pipefail
+            cd ~/f1predict-test
+
+            for i in $(seq 1 60); do
+              APPLIED=$(docker exec f1predict-test-postgres-1 psql -U f1predict -d pitwall_db -tAc \
+                "SELECT count(*) FROM flyway_schema_history WHERE success" 2>/dev/null || echo 0)
+              [ "${APPLIED:-0}" -ge 12 ] && break
+              echo "  waiting for test pitwall-api migrations... (${APPLIED:-0}/12, attempt $i/60)"
+              sleep 5
+            done
+
+            STACK_DIR=~/f1predict-test POSTGRES_CONTAINER=f1predict-test-postgres-1 \
+              ./consolidate-databases.sh
+
+            docker compose --project-name f1predict-test \
+              -f docker-compose.yml -f docker-compose.test.yml restart pitwall-api
           '
 
       - name: Check nginx config for test.pitwall.guru

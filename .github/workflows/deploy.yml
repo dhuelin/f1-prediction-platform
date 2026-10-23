@@ -102,7 +102,8 @@ jobs:
 
       - name: Copy compose files to server
         run: |
-          scp docker-compose.yml docker-compose.prod.yml infra/backup-db.sh \
+          scp docker-compose.yml docker-compose.prod.yml \
+            infra/backup-db.sh infra/consolidate-databases.sh \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/f1predict/
 
       - name: Bootstrap server .env (generate secrets if missing)
@@ -127,6 +128,61 @@ jobs:
             fi
           '
 
+      - name: Pre-deploy backup of every database
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          # Runs before any image is pulled or any container replaced, so there is
+          # always a dump taken immediately before the change. Every database on
+          # the box is dumped, not just the two this release uses: the
+          # per-service databases from before the consolidation still hold the
+          # live data, and they are exactly what the next step reads.
+          #
+          # A failure here fails the deploy. Deploying on top of data with no
+          # backup is the one thing worth stopping for.
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            set -euo pipefail
+            cd /opt/f1predict
+            chmod +x backup-db.sh consolidate-databases.sh
+
+            # Postgres may be down if the stack was in a restart loop. Bring up
+            # just that one container; the application containers are replaced
+            # further down.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d postgres
+            for i in $(seq 1 24); do
+              docker exec f1predict-postgres-1 pg_isready -U f1predict >/dev/null 2>&1 && break
+              echo "  waiting for postgres... ($i/24)"
+              sleep 5
+            done
+            docker exec f1predict-postgres-1 pg_isready -U f1predict
+
+            ALL=$(docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tAc \
+              "SELECT datname FROM pg_database WHERE NOT datistemplate AND datname <> '"'"'postgres'"'"' ORDER BY 1" \
+              | tr -d "\r" | tr "\n" " ")
+            echo "  databases on the box: ${ALL:-none}"
+
+            # n_live_tup is the statistics collector'"'"'s estimate, not an exact
+            # count -- good enough for a log of what was on the box, and far
+            # cheaper than count(*) over every table. The consolidation step
+            # counts rows exactly before it copies anything.
+            echo "  non-empty tables before the deploy (estimated row counts):"
+            for db in $ALL; do
+              docker exec f1predict-postgres-1 psql -U f1predict -d "$db" -tAc "
+                SELECT '"'"'    '"'"' || current_database() || '"'"'.'"'"' || relname
+                       || '"'"' ~ '"'"' || n_live_tup
+                FROM pg_stat_user_tables WHERE n_live_tup > 0 ORDER BY relname" || true
+            done
+
+            if [ -n "${ALL// /}" ]; then
+              DATABASES="$ALL" STACK_DIR=/opt/f1predict ./backup-db.sh
+              echo "  backups on disk:"
+              ls -lh /opt/f1predict/backups/*.sql.gz | tail -20
+            else
+              echo "  no databases yet -- nothing to back up"
+            fi
+          '
+
       - name: Sync launch page static files
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -146,6 +202,32 @@ jobs:
             echo "  launch page: synced ($(ls /opt/f1predict/web-static | wc -l) files)"
           '
 
+      # Before the application containers, not after: pitwall-api connects to
+      # pitwall_db on startup, so a database that does not exist yet means a
+      # crash-restart loop until this step catches up.
+      - name: Initialise databases (idempotent)
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
+            # Postgres is already up and ready -- the backup step above waited
+            # for it -- but check again so this step stands on its own.
+            for i in $(seq 1 12); do
+              docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null && break
+              echo "Waiting for postgres... ($i/12)"
+              sleep 5
+            done
+            # Create each database if it does not already exist (safe on every deploy)
+            for db in pitwall_db f1data_db; do
+              docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tc \
+                "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
+                | grep -q 1 \
+                || docker exec f1predict-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
+              echo "  ${db}: ready"
+            done
+          '
+
       - name: Pull new images and restart services
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -162,26 +244,41 @@ jobs:
             docker image prune -f
           '
 
-      - name: Initialise databases (idempotent)
+      - name: Consolidate the per-service databases into pitwall_db
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
+          # This release replaces six services, each with its own database, with
+          # one pitwall-api reading pitwall_db. Without this step the old data
+          # stays on disk unread and the app comes up looking like a fresh
+          # install.
+          #
+          # The script is idempotent and read-only against the old databases, so
+          # it is safe on every deploy: on a box that has already been
+          # consolidated, or never held the old databases, it reports and exits 0.
+          # See infra/consolidate-databases.sh for what it copies and why.
           ssh ${DEPLOY_USER}@${DEPLOY_HOST} '
-            # Wait for postgres to be ready (up to 60s)
-            for i in $(seq 1 12); do
-              docker exec f1predict-postgres-1 pg_isready -U f1predict 2>/dev/null && break
-              echo "Waiting for postgres... ($i/12)"
+            set -euo pipefail
+            cd /opt/f1predict
+
+            # Wait for pitwall-api to finish applying its migrations -- the
+            # tables have to exist before anything is copied into them. Flyway
+            # runs during startup, so this is also the real readiness check for
+            # the new container.
+            for i in $(seq 1 60); do
+              APPLIED=$(docker exec f1predict-postgres-1 psql -U f1predict -d pitwall_db -tAc \
+                "SELECT count(*) FROM flyway_schema_history WHERE success" 2>/dev/null || echo 0)
+              [ "${APPLIED:-0}" -ge 12 ] && break
+              echo "  waiting for pitwall-api migrations... (${APPLIED:-0}/12, attempt $i/60)"
               sleep 5
             done
-            # Create each database if it does not already exist (safe on every deploy)
-            for db in pitwall_db f1data_db; do
-              docker exec f1predict-postgres-1 psql -U f1predict -d postgres -tc \
-                "SELECT 1 FROM pg_database WHERE datname = '"'"'${db}'"'"'" \
-                | grep -q 1 \
-                || docker exec f1predict-postgres-1 psql -U f1predict -d postgres -c "CREATE DATABASE ${db};"
-              echo "  ${db}: ready"
-            done
+
+            STACK_DIR=/opt/f1predict ./consolidate-databases.sh
+
+            # Restart so no request is served mid-copy against a half-populated
+            # database. Cheap -- one container, no image pull.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml restart pitwall-api
           '
 
       - name: Install daily database backup cron

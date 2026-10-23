@@ -288,39 +288,54 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 The consolidation replaces six databases with one. A server that already ran the
 split services has data in `auth_db`, `league_db`, `prediction_db`, `scoring_db`,
-`notification_db` and `analytics_db`; the new app reads `pitwall_db`, which the
-deploy creates empty. **Deploying without migrating leaves that data stranded** —
-the old databases are not dropped, so nothing is lost, but the app starts blank.
+`notification_db` and `analytics_db`; the new app reads `pitwall_db`. Coming up
+against an empty `pitwall_db` would leave that data stranded — not lost, since
+the old databases are never dropped, but invisible, and the app would look like a
+fresh install.
 
-No table names collide across the six, so a straight dump-and-load works. Run this
-on the server once, before the first consolidated deploy:
+**The deploy handles this.** No manual step is needed; `deploy.yml` runs, in
+order:
+
+1. **Pre-deploy backup** — before any image is pulled or container replaced,
+   every database on the box is dumped to `/opt/f1predict/backups/`. A failure
+   here fails the deploy.
+2. **Create `pitwall_db` and `f1data_db`** if absent, before the application
+   containers start, so Flyway finds its database on the first attempt.
+3. **Pull and restart** the three services.
+4. **Consolidate** — once `pitwall-api` has applied its 12 migrations,
+   `infra/consolidate-databases.sh` copies each old database's rows into
+   `pitwall_db` and restarts `pitwall-api`.
+
+Why a plain data copy is enough: `pitwall-api`'s migrations are the six services'
+migrations renumbered, byte-for-byte identical (verified with `diff`), so
+`pitwall_db`'s schema is exactly the union of the six. All 17 table names are
+distinct, and no foreign key crosses what used to be a database boundary — every
+`REFERENCES` stays inside its own domain. There is nothing to transform.
+
+`consolidate-databases.sh` is safe to run on every deploy:
+
+- **Idempotent** — a table is skipped if `pitwall_db` already holds rows for it,
+  so a re-run after a partial failure resumes rather than duplicating.
+- **Read-only against the sources** — nothing is dropped. Reclaim the old
+  databases by hand once you are satisfied; the script prints the `DROP DATABASE`
+  commands.
+- **Copies in foreign-key order** — parents first, table by table, rather than
+  `pg_dump`'s alphabetical order (which would put `league_members` before
+  `leagues`).
+- **Resets `BIGSERIAL` sequences** past the copied rows, so the next insert does
+  not collide with an existing id.
+- **Aborts before writing** if `pitwall_db` is missing, if Flyway has not finished,
+  or if `league_db` holds duplicate invite codes (legal before V12 added the
+  `UNIQUE` constraint — the error names the codes).
+- **Exits 0 having done nothing** when the old databases are absent or empty, so
+  a fresh box and an already-consolidated box both pass.
+
+Run it by hand, or preview without writing:
 
 ```bash
-cd ~/f1predict
-
-# 1. Back up everything first
-docker exec f1predict-postgres-1 pg_dumpall -U f1predict > ~/f1predict-pre-merge.sql
-
-# 2. Create the target database
-docker exec f1predict-postgres-1 psql -U f1predict -d postgres \
-  -c "CREATE DATABASE pitwall_db;"
-
-# 3. Copy each old database's data in. Skip Flyway's own history table —
-#    the consolidated app has a single renumbered V1..V11 chain of its own.
-for db in auth_db league_db prediction_db scoring_db notification_db analytics_db; do
-  docker exec f1predict-postgres-1 pg_dump -U f1predict --data-only \
-    --exclude-table=flyway_schema_history "$db" \
-  | docker exec -i f1predict-postgres-1 psql -U f1predict -d pitwall_db
-done
+STACK_DIR=/opt/f1predict /opt/f1predict/consolidate-databases.sh
+DRY_RUN=1 STACK_DIR=/opt/f1predict /opt/f1predict/consolidate-databases.sh
 ```
-
-Step 3 must run **after** the new app has started once and applied its migrations,
-so the tables exist to load into. In practice: deploy, let `pitwall-api` come up
-and create the schema, stop it, load the data, start it again.
-
-If the deployment has no data worth keeping (only smoke-test accounts), skip all
-of this — the deploy creates `pitwall_db` and Flyway builds the schema from
-scratch.
 
 ### Rate limiting
 
@@ -361,6 +376,15 @@ the trustworthy option for authenticated routes.
 `deploy.yml` installs `infra/backup-db.sh` on the production server and registers
 a cron entry for **03:15 UTC daily**. Each run dumps `pitwall_db` and `f1data_db`,
 gzips them into `/opt/f1predict/backups/`, and prunes anything older than 7 days.
+
+The same script also runs once per deploy, before anything on the box changes,
+over *every* database it finds rather than just those two — see
+[Migrating an existing deployment](#migrating-an-existing-deployment). Override
+the list for a one-off:
+
+```bash
+DATABASES="auth_db league_db" STACK_DIR=/opt/f1predict /opt/f1predict/backup-db.sh
+```
 
 ```bash
 ~/f1predict/backup-db.sh          # run on demand

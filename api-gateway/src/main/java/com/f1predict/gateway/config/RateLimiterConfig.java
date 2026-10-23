@@ -3,6 +3,7 @@ package com.f1predict.gateway.config;
 import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Mono;
 
 @Configuration
@@ -48,8 +49,16 @@ public class RateLimiterConfig {
      * rather than per-client. Fixing that means deciding which forwarded header to
      * trust and whether the origin may be reached without going through Cloudflare;
      * see the README.
+     *
+     * Marked @Primary because Spring Cloud Gateway's own
+     * requestRateLimiterGatewayFilterFactory autowires a single KeyResolver as the
+     * default for routes that do not name one. With two KeyResolver beans and no
+     * primary, that injection point is ambiguous and the whole gateway context
+     * fails to refresh. Every route here names its resolver explicitly, so this
+     * default is only a fallback -- but it has to be unambiguous.
      */
     @Bean
+    @Primary
     public KeyResolver remoteAddrKeyResolver() {
         return exchange -> Mono.just(remoteAddress(exchange));
     }

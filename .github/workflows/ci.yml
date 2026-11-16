@@ -30,6 +30,53 @@ jobs:
           APNS_KEY_ID: test
           APNS_BUNDLE_ID: com.f1predict.app
 
+      # `gradlew test -q` prints a count and nothing else, so a failure here used
+      # to read "63 tests completed, 8 failed" with no indication of which 8 or
+      # why -- enough to know something broke, not enough to act on. The JUnit XML
+      # has the detail; this prints it.
+      - name: Report which tests failed
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          rows = []
+          for path in sorted(glob.glob('*/build/test-results/test/*.xml')):
+              try:
+                  root = ET.parse(path).getroot()
+              except ET.ParseError:
+                  continue
+              for case in root.iter('testcase'):
+                  for bad in list(case.findall('failure')) + list(case.findall('error')):
+                      msg = (bad.get('message') or bad.get('type') or '').strip()
+                      rows.append((f"{case.get('classname')}.{case.get('name')}",
+                                   msg.splitlines()[0][:300] if msg else '(no message)'))
+          if not rows:
+              print("No failing testcases in the XML reports -- the failure was "
+                    "probably compilation or the build itself, not a test.")
+          else:
+              print(f"{len(rows)} failing test(s):\n")
+              for name, msg in rows:
+                  print(f"  {name}\n      {msg}\n")
+              # Same root cause repeated is the common case; summarise it.
+              from collections import Counter
+              print("Grouped by first line of message:")
+              for msg, n in Counter(m for _, m in rows).most_common():
+                  print(f"  {n:3}x  {msg[:160]}")
+          PY
+
+      # Keeps the full HTML and XML reports for anything the summary above does
+      # not make obvious.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            */build/reports/tests/test/**
+            */build/test-results/test/**
+          retention-days: 7
+          if-no-files-found: ignore
+
   docker-smoke-test:
     name: Docker Compose Smoke Test
     runs-on: ubuntu-latest

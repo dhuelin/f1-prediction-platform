@@ -344,7 +344,7 @@ across gateway instances):
 
 | Route | Limit | Key |
 |-------|-------|-----|
-| `/auth/**` | 5/s, burst 10 | client IP — **see caveat** |
+| `/auth/**` | 5/s, burst 10 | forwarded client IP — **see caveat** |
 | `POST /leagues/join` | 6 back-to-back, then 1 per 10s | authenticated user |
 
 `POST /leagues/join` is the one endpoint where an invite code alone grants entry
@@ -361,15 +361,32 @@ general route's `Path=/leagues/**` also matches `/leagues/join`. Put it second
 and the limit silently stops applying. `GatewayRouteOrderTest` fails if that
 ordering is ever broken.
 
-**Caveat on the `/auth/**` limit:** its `remoteAddrKeyResolver` reads the socket
-peer address, but the gateway sits behind nginx on localhost, so every request
-resolves to `127.0.0.1`. That limit currently behaves as a single global bucket
-rather than per-client. Fixing it means choosing which forwarded header to trust
-(`CF-Connecting-IP` or the left-most `X-Forwarded-For`) and deciding whether the
-origin may be reached without going through Cloudflare — today it can, because
-`api.pitwall.guru` is a DNS-only record with port 80 open, so either header is
-forgeable by going straight to the IP. Until that is settled, per-user keys are
-the trustworthy option for authenticated routes.
+`/auth/**` is keyed by `clientIpKeyResolver`, which takes the first usable of
+`CF-Connecting-IP` (set by Cloudflare, which proxies the apex and www, and passed
+through by nginx), the left-most `X-Forwarded-For` entry (nginx builds it with
+`$proxy_add_x_forwarded_for`, so the original client is first), and finally the
+socket peer address.
+
+It is keyed that way because the socket peer address behind nginx is `127.0.0.1`
+for *every* request. The limit was therefore a **single global bucket of 5/s
+shared by everyone**: one client hitting `/auth/**` hard exhausted it and locked
+every other user out of logging in — a site-wide denial of service reachable by
+accident, never mind on purpose. `GatewayRouteOrderTest` now fails if the key
+ever goes back to `remoteAddrKeyResolver`.
+
+**Caveat — this is not brute-force protection.** A header can be forged. Port 80
+is open and `api.pitwall.guru` is a DNS-only record pointing at the VPS, so
+anyone who skips Cloudflare and talks to the origin directly can send any
+`CF-Connecting-IP` they like and get a fresh bucket per request. What the change
+buys is the removal of the shared-bucket outage, not a defence against a
+determined attacker. Two things would close it properly, neither of them in this
+repository:
+
+- Restrict port 80 to [Cloudflare's published ranges](https://www.cloudflare.com/ips/)
+  at the firewall or in nginx, which makes the forwarded headers trustworthy.
+- Add a per-account throttle in `pitwall-api` — keyed on the submitted email
+  rather than on anything the caller controls, so it cannot be rotated at all.
+  This is the unforgeable version and the right answer for login specifically.
 
 ### Database backups
 

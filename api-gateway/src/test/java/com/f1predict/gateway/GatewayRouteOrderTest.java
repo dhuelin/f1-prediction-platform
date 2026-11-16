@@ -75,6 +75,26 @@ class GatewayRouteOrderTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void authRouteRateLimitsPerClientNotGlobally() {
+        Map<String, Object> route = routes().get(indexOf("pitwall-api-auth"));
+
+        List<Map<String, Object>> filters = (List<Map<String, Object>>) route.get("filters");
+        Map<String, Object> limiter = filters.stream()
+            .filter(f -> "RequestRateLimiter".equals(f.get("name")))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("no RequestRateLimiter on the auth route"));
+
+        Map<String, Object> args = (Map<String, Object>) limiter.get("args");
+        // Not remoteAddrKeyResolver. Behind nginx that resolves to 127.0.0.1 for
+        // every request, making this one global 5/s bucket that any single client
+        // could exhaust -- locking every other user out of logging in.
+        assertThat(args.get("key-resolver"))
+            .as("/auth/** must be keyed per client, or the limit is a site-wide outage waiting to happen")
+            .isEqualTo("#{@clientIpKeyResolver}");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void joinRouteMatchesOnlyThePostOnThatExactPath() {
         Map<String, Object> route = routes().get(indexOf("pitwall-api-league-join"));
         List<String> predicates = (List<String>) route.get("predicates");

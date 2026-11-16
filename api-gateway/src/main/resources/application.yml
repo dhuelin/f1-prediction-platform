@@ -36,7 +36,12 @@ spring:
               args:
                 redis-rate-limiter.replenishRate: 5
                 redis-rate-limiter.burstCapacity: 10
-                key-resolver: "#{@remoteAddrKeyResolver}"
+                # Keyed on the forwarded client address, not the socket peer.
+                # The socket peer behind nginx is 127.0.0.1 for every request,
+                # which made this one global bucket that any single client could
+                # exhaust, locking everyone else out of logging in. See
+                # clientIpKeyResolver for what this does and does not protect.
+                key-resolver: "#{@clientIpKeyResolver}"
         - id: f1-data-service
           uri: http://f1-data-service:8085
           predicates:

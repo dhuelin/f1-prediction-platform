@@ -7,21 +7,50 @@ on:
     branches: ["**"]
 
 jobs:
+  # Runs directly on the runner, NOT in a gradle container.
+  #
+  # Eight of these tests are Testcontainers integration tests, which need a
+  # Docker daemon. Inside a container job they stopped being able to find one --
+  # every one of them failed with "Could not find a valid Docker environment",
+  # having passed from inside gradle:8.7-jdk21 until late October. Rather than
+  # depend on a container job being given the host's Docker socket, the job now
+  # runs where Docker is unambiguously present: the runner itself, which is where
+  # docker-smoke-test and deploy-template-smoke already do their work.
+  #
+  # The JDK comes from setup-java instead of the image. build.gradle declares a
+  # Java 21 toolchain, so Gradle resolves it to that installation.
   build-and-test:
     name: Build & Unit Tests
     runs-on: ubuntu-latest
-    container: gradle:8.7-jdk21
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:
+          # Not /root/.gradle: off the container job this runs as a non-root user.
           path: |
-            /root/.gradle/caches
-            /root/.gradle/wrapper
+            ~/.gradle/caches
+            ~/.gradle/wrapper
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
           restore-keys: gradle-
+
+      - name: Confirm Docker is available to Testcontainers
+        run: |
+          # Fail here, with a clear reason, rather than eight tests deep.
+          docker info >/dev/null 2>&1 || {
+            echo "FAIL: no Docker daemon on the runner."
+            echo "      The Testcontainers integration tests in pitwall-api cannot run"
+            echo "      without one. If this starts failing, that is an environment"
+            echo "      change, not a test change."
+            exit 1; }
+          echo "  docker: $(docker version --format '{{.Server.Version}}')"
 
       - name: Run all unit tests
         run: ./gradlew test --no-daemon -q

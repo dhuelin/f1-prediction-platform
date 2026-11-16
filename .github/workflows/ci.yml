@@ -69,6 +69,7 @@ jobs:
           python3 - <<'PY'
           import glob, xml.etree.ElementTree as ET
           rows = []
+          traces = {}
           for path in sorted(glob.glob('*/build/test-results/test/*.xml')):
               try:
                   root = ET.parse(path).getroot()
@@ -77,8 +78,13 @@ jobs:
               for case in root.iter('testcase'):
                   for bad in list(case.findall('failure')) + list(case.findall('error')):
                       msg = (bad.get('message') or bad.get('type') or '').strip()
-                      rows.append((f"{case.get('classname')}.{case.get('name')}",
-                                   msg.splitlines()[0][:300] if msg else '(no message)'))
+                      first = msg.splitlines()[0][:300] if msg else '(no message)'
+                      rows.append((f"{case.get('classname')}.{case.get('name')}", first))
+                      # Keep one full stack per distinct message. The first line
+                      # names the symptom; the cause chain under it is what says
+                      # why, and without it a failure like "Could not find a valid
+                      # Docker environment" gives nothing to act on.
+                      traces.setdefault(first, (bad.text or '').strip())
           if not rows:
               print("No failing testcases in the XML reports -- the failure was "
                     "probably compilation or the build itself, not a test.")
@@ -91,7 +97,45 @@ jobs:
               print("Grouped by first line of message:")
               for msg, n in Counter(m for _, m in rows).most_common():
                   print(f"  {n:3}x  {msg[:160]}")
+              # One stack per distinct cause, capped so a wall of repeated
+              # frames does not bury the next failure.
+              print("\nOne stack trace per distinct cause:")
+              for msg, _ in Counter(m for _, m in rows).most_common():
+                  print(f"\n── {msg[:160]}")
+                  lines = traces.get(msg, '').splitlines()
+                  for line in lines[:40]:
+                      print(f"   {line}")
+                  if len(lines) > 40:
+                      print(f"   ... {len(lines) - 40} more frames "
+                            f"(full reports in the test-reports artifact)")
           PY
+
+      # The summary above names the symptom. For a Docker-discovery failure that
+      # is all it can do: Testcontainers logs its per-strategy reasons rather
+      # than attaching them to the exception, so the stack trace carries no
+      # cause. Re-running one of them with the test JVM's output visible is the
+      # only way to see which strategies it tried and why each was rejected.
+      #
+      # One test, not the suite, and `|| true` so this never decides the job --
+      # the real run above already did.
+      - name: On a Docker-discovery failure, show why
+        if: failure()
+        run: |
+          if grep -rqs "valid Docker environment" */build/test-results/test/*.xml; then
+            echo "A test could not reach Docker. docker info said:"
+            docker info 2>&1 | head -25 | sed 's/^/  /'
+            echo
+            echo "Testcontainers client: $(grep -o 'testcontainers = \"[^\"]*\"' gradle/libs.versions.toml)"
+            echo
+            echo "Re-running one integration test with output shown:"
+            ./gradlew :pitwall-api:test --tests 'com.f1predict.notification.MigrationTest' \
+              -PtestOutput --no-daemon 2>&1 \
+              | grep -aiE "docker|testcontainers|ping|socket|version|strategy" \
+              | head -60 | sed 's/^/  /' || true
+          else
+            echo "Not a Docker-discovery failure; see the summary above."
+          fi
+        continue-on-error: true
 
       # Keeps the full HTML and XML reports for anything the summary above does
       # not make obvious.

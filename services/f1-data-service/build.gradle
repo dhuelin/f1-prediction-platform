@@ -2,6 +2,13 @@ plugins {
     alias(libs.plugins.spring.boot)
     alias(libs.plugins.spring.dependency.management)
 }
+// Spring Boot's dependency-management BOM pins testcontainers.version (3.3.0
+// pins 1.19.8). Declaring a newer junit-jupiter and postgresql here is not
+// enough on its own: the BOM pulls the core org.testcontainers:testcontainers
+// artifact back down, leaving 1.21.4 modules on a 1.19.8 core. This is the
+// documented override, and it moves the whole family together.
+ext['testcontainers.version'] = libs.versions.testcontainers.get()
+
 
 dependencies {
     implementation project(':common')

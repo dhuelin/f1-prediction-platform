@@ -13,7 +13,20 @@ subprojects {
     apply plugin: 'java'
     java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
     repositories { mavenCentral() }
-    test { useJUnitPlatform() }
+    test {
+        useJUnitPlatform()
+        testLogging {
+            events 'failed'
+            exceptionFormat 'full'
+            // Testcontainers reports WHY it could not reach Docker through its
+            // logger, not through the exception it throws -- the stack trace has
+            // no cause chain at all. So when Docker discovery is what is in
+            // question, the test JVM's output is the only place the answer
+            // exists. Off by default because 63 tests of Spring Boot startup
+            // logs would bury everything else.
+            showStandardStreams = project.hasProperty('testOutput')
+        }
+    }
     dependencies {
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
